@@ -1,9 +1,9 @@
 # sequantial-models-r
 
-Comparison of the performance of RNN, BRN, LSTM and Transformers using R language
+Comparison of the performance of RNN, BRN, LSTM and Transformers using R languageUsed Datasets
 
-## Used Datasets
+## Used datasets
 
-### Time Series dataset from kaggle (weather.csv)
+**Time series dataset: [Jena Climate](https://www.kaggle.com/datasets/mnassrib/jena-climate)**
 
-### Text dataset
+**Text dataset:  [AG News Classification Dataset](https://www.kaggle.com/datasets/amananandrai/ag-news-classification-dataset)**
