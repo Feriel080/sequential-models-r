@@ -7,3 +7,11 @@ Comparison of the performance of RNN, BRN, LSTM and Transformers using R languag
 **Time series dataset: [Jena Climate](https://www.kaggle.com/datasets/mnassrib/jena-climate)**
 
 **Text dataset:  [AG News Classification Dataset](https://www.kaggle.com/datasets/amananandrai/ag-news-classification-dataset)**
+
+## Instructions
+
+```bash
+git clone <repo url>
+```
+
+In the R terminal run `renv::retore()`
