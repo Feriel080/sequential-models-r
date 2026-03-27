@@ -1,6 +1,6 @@
 # sequantial-models-r
 
-Comparison of the performance of RNN, BRN, LSTM and Transformers using R languageUsed Datasets
+Comparison of the performance of RNN, BRN, LSTM and Transformers using R language
 
 ## Requirements
 
