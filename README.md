@@ -5,10 +5,6 @@
 Comparison of the performance of sequential models using **R**
 ## _NOTICE: THIS WORK IS FOR LEARNING PURPOSE_
 
-## Requirements
-
-- See `requirements.txt` for package dependencies
-
 ## Used datasets
 
 * **Time series dataset: [Jena Climate](https://www.kaggle.com/datasets/mnassrib/jena-climate)**:
