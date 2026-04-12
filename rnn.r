@@ -1,291 +1,493 @@
-library(torch)
 library(tidyverse)
-library(ggplot2)
+library(tidymodels)
 library(data.table)
-library(crayon)
 library(jsonlite)
-library(keras)
+library(crayon)
+library(ggplot2)
+library(timetk)       
+library(keras3)        
+library(text2vec)      
+library(textrecipes)   
+library(yardstick)     
+library(probably)      
 
-early_stop <- callback_early_stopping(
-    monitor="val_loss",
-    patience=7,
-    restore_best_weights  = True
-)
-
-
-source('save_results.r')
+source("save_results.r")
 
 set.seed(42)
-torch_manual_seed(42)
 theme_set(theme_minimal())
 
-# Helper function to create sequences
-create_sequences <- function(X, y, seq_length = 24) {
-  n <- nrow(X)
-  n_features <- ncol(X)
-  X_seq <- array(0, dim = c(n - seq_length, seq_length, n_features))
-  y_seq <- numeric(n - seq_length)
-  
-  for (i in 1:(n - seq_length)) {
-    X_seq[i, , ] <- X[i:(i + seq_length - 1), , drop = FALSE]
-    y_seq[i] <- y[i + seq_length]
-  }
-  
-  list(X = X_seq, y = y_seq)
-}
+fmt_time <- function(secs) format(.POSIXct(secs, tz = "UTC"), "%H:%M:%S")
 
-DEVICE <- if (cuda_is_available()) "cuda" else "cpu"
-
-cat("Choose a number for a specific dataset:\n1. Time series forecasting - Univariate.\n2. Time series forecasting - Multivariate.\n3. Text classification\n")
+cat("Choose a number for a specific dataset:\n",
+    "1. Time series forecasting - Univariate.\n",
+    "2. Time series forecasting - Multivariate.\n",
+    "3. Text classification\n")
 choice <- as.integer(readline())
 
-if (choice == 1 || choice == 2) {
-  output_folder <- "time_series/"
-  
+cat("this number was chosen: ", choice)
+train_losses <- c()
+val_losses <- c()
+times_per_epoch <- c()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CHOICES 1 & 2 — Time series forecasting
+# ══════════════════════════════════════════════════════════════════════════════
+if (choice %in% c(1, 2)) {
+
   if (choice == 1) {
-    dir.create("time_series/results/brnn/Univariate", recursive = TRUE, showWarnings = FALSE)
-    output_folder <- "time_series/results/brnn/Univariate"
-    data <- fread("time_series/datasets/pressure_lags.csv")
-    data <- data %>% 
-      mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
-      column_to_rownames("Date Time")
-  } else if (choice == 2) {
-    dir.create("time_series/results/brnn/multivariate", recursive = TRUE, showWarnings = FALSE)
-    output_folder <- "time_series/results/brnn/multivariate"
-    data <- fread("time_series/datasets/4features_lags.csv")
-    data <- data %>% 
-      mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
-      column_to_rownames("Date Time")
+    output_folder <- "time_series/results/rnn/Univariate"
+    csv_path <- "time_series/datasets/pressure_lags.csv"
+  } else {
+    output_folder <- "time_series/results/rnn/multivariate"
+    csv_path <- "time_series/datasets/4features_lags.csv"
   }
-  
-  TARGET <- 'p (mbar)'
-  FEATURES <- setdiff(names(data), TARGET)
-  
-  X <- as.matrix(data[, FEATURES, with = FALSE])
-  y <- data[[TARGET]]
-  
-  split_point <- floor(length(y) * 0.8)
-  X_train_val <- X[1:split_point, , drop = FALSE]
-  X_test <- X[(split_point + 1):nrow(X), , drop = FALSE]
-  y_train_val <- y[1:split_point]
-  y_test <- y[(split_point + 1):length(y)]
-  
-  val_split <- floor(length(y_train_val) * 0.125)
-  X_train <- X_train_val[1:(nrow(X_train_val) - val_split), , drop = FALSE]
-  X_val <- X_train_val[(nrow(X_train_val) - val_split + 1):nrow(X_train_val), , drop = FALSE]
-  y_train <- y_train_val[1:(length(y_train_val) - val_split)]
-  y_val <- y_train_val[(length(y_train_val) - val_split + 1):length(y_train_val)]
-  
-  # Standard scaling (equivalent to sklearn StandardScaler)
-  scale_mean <- colMeans(X_train)
-  scale_sd <- apply(X_train, 2, sd)
-  
-  X_train <- scale(X_train, center = scale_mean, scale = scale_sd)
-  X_val <- scale(X_val, center = scale_mean, scale = scale_sd)
-  X_test <- scale(X_test, center = scale_mean, scale = scale_sd)
-  
-  # Save scaler (equivalent to pickle)
-  saveRDS(list(mean = scale_mean, sd = scale_sd), 
-          file = paste0("time_series/results/scaler_", choice, ".rds"))
-  
-  SEQ_LENGTH <- 24
-  
-  train_seq <- create_sequences(X_train, y_train, SEQ_LENGTH)
-  val_seq <- create_sequences(X_val, y_val, SEQ_LENGTH)
-  test_seq <- create_sequences(X_test, y_test, SEQ_LENGTH)
-  
-  # Convert to tensors
-  X_tr <- torch_tensor(train_seq$X, dtype = torch_float())
-  y_tr <- torch_tensor(matrix(train_seq$y, ncol = 1), dtype = torch_float())
-  X_v <- torch_tensor(val_seq$X, dtype = torch_float())
-  y_v <- torch_tensor(matrix(val_seq$y, ncol = 1), dtype = torch_float())
-  X_te <- torch_tensor(test_seq$X, dtype = torch_float())
-  y_te <- torch_tensor(matrix(test_seq$y, ncol = 1), dtype = torch_float())
-  
-  BATCH_SIZE <- 64
-  EPOCHS <- 50
-  input_size <- dim(train_seq$X)[3]
-  hidden_size <- 64
-  num_layers <- 2
-  dropout <- 0.2
-  learning_rate <- 0.001
-  
-  # Create dataloaders
-  train_ds <- tensor_dataset(X_tr, y_tr)
-  train_loader <- dataloader(train_ds, batch_size = BATCH_SIZE, shuffle = FALSE)
-  
-  val_ds <- tensor_dataset(X_v, y_v)
-  val_loader <- dataloader(val_ds, batch_size = BATCH_SIZE, shuffle = FALSE)
-  
-  # Define BRNN model
-  brnn <- nn_rnn(
-    input_size = input_size,
-    hidden_size = hidden_size,
-    num_layers = num_layers,
-    batch_first = TRUE,
-    dropout = if (num_layers > 1) dropout else 0,
-    nonlinearity = "tanh",
-    bidirectional = TRUE
-  )$to(DEVICE)
-  
-  fc <- nn_linear(hidden_size * 2, 1)$to(DEVICE)
-  
-  params <- c(brnn$parameters, fc$parameters)
-  criterion <- nn_mse_loss()
-  optimizer <- optim_adam(params, lr = learning_rate)
-  
-  # Forward function
-  forward <- function(x) {
-    out <- brnn(x)
-    brnn_out <- out[[1]]
-    seq_len <- brnn_out$size()[[2]]  # Get last time step
-    last_step <- brnn_out[, seq_len, , drop = FALSE]
-    fc(last_step)
-  }
-  
-  train_losses <- c()
-  val_losses <- c()
-  times_per_epoch <- c()
-  early_stopping <- EarlyStopping()
-  stop_epoch <- EPOCHS - 1
-  saved_checkpoint <- FALSE
-  
-  cat(blue("Training started...\n"))
-  start_time <- Sys.time()
-  
-  for (epoch in 1:EPOCHS) {
-    start_epoch <- Sys.time()
-    
-    # Training
-    brnn$train()
-    fc$train()
-    total_train_loss <- 0
-    
-    for (batch in train_loader) {
-      bx <- batch[[1]]$to(DEVICE)
-      by <- batch[[2]]$to(DEVICE)
-      
-      optimizer$zero_grad()
-      output <- forward(bx)
-      loss <- criterion(output, by)
-      loss$backward()
-      optimizer$step()
-      total_train_loss <- total_train_loss + loss$item()
-    }
-    
-    avg_train_loss <- total_train_loss / length(train_loader)
-    train_losses <- c(train_losses, avg_train_loss)
-    
-    # Validation
-    brnn$eval()
-    fc$eval()
-    total_val_loss <- 0
-    
-    with_no_grad({
-      for (batch in val_loader) {
-        batch_x <- batch[[1]]$to(DEVICE)
-        batch_y <- batch[[2]]$to(DEVICE)
-        output <- forward(batch_x)
-        loss <- criterion(output, batch_y)
-        total_val_loss <- total_val_loss + loss$item()
-      }
-    })
-    
-    avg_val_loss <- total_val_loss / length(val_loader)
-    val_losses <- c(val_losses, avg_val_loss)
-    
-    end_epoch <- Sys.time()
-    epoch_time <- as.numeric(difftime(end_epoch, start_epoch, units = "secs"))
-    times_per_epoch <- c(times_per_epoch, format(.POSIXct(epoch_time, origin = "1970-01-01"), "%H:%M:%S"))
-    
-    if (early_stopping$check(avg_val_loss, brnn)) {
-      brnn <- early_stopping$load_best_model(brnn)
-      torch_save(list(brnn = brnn$state_dict(), fc = fc$state_dict()),
-                 paste0(output_folder, "/brnn_model_checkpoint.pth"))
-      saved_checkpoint <- TRUE
-      cat("Early stopping\n")
-      stop_epoch <- epoch
-      break
-    }
-    
-    cat(sprintf("Epoch [%d/%d], Train Loss: %.4f, Val Loss: %.4f\n",
-                epoch, EPOCHS, avg_train_loss, avg_val_loss))
-  }
-  
-  execution_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
-  
-  if (!saved_checkpoint) {
-    torch_save(list(brnn = brnn$state_dict(), fc = fc$state_dict()),
-               paste0(output_folder, "/brnn_model.pth"))
-  }
-  
-  # Save losses to JSON
-  write_json(list(`Train losses` = train_losses, `Val Losses` = val_losses),
-             paste0(output_folder, "/train_val_losses.json"),
-             pretty = TRUE, auto_unbox = TRUE)
-  
-  # Plot learning curve
-  epochs_range <- 1:stop_epoch
-  
-  df_loss <- data.frame(
-    Epoch = rep(epochs_range, 2),
-    Loss = c(train_losses[1:stop_epoch], val_losses[1:stop_epoch]),
-    Type = rep(c("Train Loss", "Val Loss"), each = stop_epoch)
+  dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
+
+  data <- fread(csv_path) %>%
+    as_tibble() %>%
+    mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
+    arrange(`Date Time`)
+
+  TARGET   <- "p (mbar)"
+  FEATURES <- setdiff(names(data), c("Date Time", TARGET))
+
+  splits <- time_series_split(
+    data,
+    date_var   = `Date Time`,
+    assess     = "20%",   
+    skip       = 0,
+    cumulative = TRUE
   )
-  
-  p <- ggplot(df_loss, aes(x = Epoch, y = Loss, color = Type)) +
-    geom_line(linewidth = 0.8) +
-    scale_color_manual(values = c("Train Loss" = "blue", "Val Loss" = "orange")) +
-    labs(title = "BRNN Learning Curve", x = "Epoch", y = "Loss (MSE)") +
+
+  train_val_df <- training(splits)
+  test_df <- testing(splits)
+
+  # Inner val split (last 12.5 % of train_val)
+  val_n <- floor(nrow(train_val_df) * 0.125)
+  train_df <- train_val_df[1:(nrow(train_val_df) - val_n), ]
+  val_df <- train_val_df[(nrow(train_val_df) - val_n + 1):nrow(train_val_df), ]
+
+  rec <- recipe(as.formula(paste(TARGET, "~ .")), data = train_df) %>%
+    step_rm(`Date Time`) %>%
+    step_normalize(all_predictors()) %>%
+    prep(training = train_df)
+
+  saveRDS(rec, file = paste0("time_series/results/scaler_", choice, ".rds"))
+  cat(green(sprintf("Scaler saved to time_series/results/scaler_%d.rds\n", choice)))
+
+  X_train <- bake(rec, train_df) %>% select(all_of(FEATURES)) %>% as.matrix()
+  X_val <- bake(rec, val_df)   %>% select(all_of(FEATURES)) %>% as.matrix()
+  X_test <- bake(rec, test_df)  %>% select(all_of(FEATURES)) %>% as.matrix()
+  y_train <- train_df[[TARGET]]
+  y_val <- val_df[[TARGET]]
+  y_test <- test_df[[TARGET]]
+
+  create_sequences <- function(X, y, seq_len = 24) {
+    n   <- nrow(X)
+    idx <- seq_len(n - seq_len)
+    Xs  <- array(0, dim = c(length(idx), seq_len, ncol(X)))
+    ys  <- numeric(length(idx))
+    for (i in idx) {
+      Xs[i, , ] <- X[i:(i + seq_len - 1), ]
+      ys[i]     <- y[i + seq_len]
+    }
+    list(X = Xs, y = ys)
+  }
+
+  SEQ_LENGTH <- 24
+
+  tr <- create_sequences(X_train, y_train, SEQ_LENGTH)
+  vl <- create_sequences(X_val,   y_val,   SEQ_LENGTH)
+  te <- create_sequences(X_test,  y_test,  SEQ_LENGTH)
+
+  BATCH_SIZE <- 64L
+  EPOCHS <- 50L
+  HIDDEN_SIZE <- 64L
+  NUM_LAYERS <- 2L
+  DROPOUT <- 0.2
+  LEARNING_RATE <- 0.001
+  input_size <- dim(tr$X)[3]
+
+  hyperparams <- list(
+    epochs = EPOCHS,
+    hidden_size = HIDDEN_SIZE,
+    num_layers = NUM_LAYERS,
+    dropout = DROPOUT,
+    learning_rate = LEARNING_RATE
+  )
+
+  model <- keras_model_sequential(name = "RNN_ts") %>%
+    layer_simple_rnn(
+      units = HIDDEN_SIZE,
+      return_sequences = (NUM_LAYERS > 1),
+      dropout = DROPOUT,
+      recurrent_dropout  = 0,
+      activation = "tanh",
+      input_shape = c(SEQ_LENGTH, input_size)
+    )
+
+  if (NUM_LAYERS > 1) {
+    for (l in seq_len(NUM_LAYERS - 2)) {
+      model <- model %>%
+        layer_simple_rnn(units = HIDDEN_SIZE, return_sequences = TRUE,
+                         dropout = DROPOUT, activation = "tanh")
+    }
+    model <- model %>%
+      layer_simple_rnn(units = HIDDEN_SIZE, dropout = DROPOUT, activation = "tanh")
+  }
+
+  model <- model %>% layer_dense(units = 1)
+
+  model %>% compile(
+    optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
+    loss = "mse"
+  )
+
+  callbacks_list <- list(
+    callback_early_stopping(
+      monitor = "val_loss",
+      patience = 5,
+      restore_best_weights = TRUE,
+      verbose = 1
+    ),
+    callback_reduce_lr_on_plateau(
+      monitor  = "val_loss",
+      factor = 0.5,
+      patience = 3,
+      verbose  = 1
+    ),
+    callback_model_checkpoint(
+      filepath = file.path(output_folder, "rnn_best.keras"),
+      monitor = "val_loss",
+      save_best_only = TRUE,
+      verbose = 1
+    )
+  )
+
+  cat(blue("Training started...\n"))
+  start_time <- proc.time()["elapsed"]
+
+  history <- model %>% fit(
+    x = tr$X,
+    y = tr$y,
+    epochs = EPOCHS,
+    batch_size = BATCH_SIZE,
+    validation_data = list(vl$X, vl$y),
+    callbacks = callbacks_list,
+    verbose = 1
+  )
+
+  execution_time <- proc.time()["elapsed"] - start_time
+
+  train_losses <- history$metrics$loss
+  val_losses <- history$metrics$val_loss
+  stop_epoch <- length(train_losses)
+
+  write_json(
+    list(`Train losses` = train_losses, `Val Losses` = val_losses),
+    file.path(output_folder, "train_val_losses.json"),
+    pretty = TRUE, auto_unbox = TRUE
+  )
+
+  y_pred <- as.vector(predict(model, te$X))
+  y_true <- te$y
+
+  results_df <- tibble(truth = y_true, estimate = y_pred)
+  r2 <- rsq(results_df, truth, estimate)$.estimate
+  mae <- mae(results_df, truth, estimate)$.estimate
+  mse <- rmse(results_df, truth, estimate)$.estimate ^ 2
+  rmse <- rmse(results_df, truth, estimate)$.estimate
+
+  metrics <- list(`R2 score` = r2, MAE = mae, mse = mse, rmse = rmse)
+  cat(sprintf("\nR²: %.4f | MAE: %.4f | MSE: %.4f | RMSE: %.4f\n",
+              r2, mae, mse, rmse))
+
+  n_show <- min(200, length(y_true))
+  pred_df <- tibble(
+    step      = 1:n_show,
+    Actual    = y_true[1:n_show],
+    Predicted = y_pred[1:n_show]
+  ) %>% pivot_longer(-step, names_to = "Series", values_to = "Value")
+
+  p_pred <- ggplot(pred_df, aes(step, Value, colour = Series)) +
+    geom_line(alpha = 0.75) +
+    scale_colour_manual(values = c(Actual = "steelblue", Predicted = "tomato")) +
+    labs(title   = sprintf("RNN — Predicted vs Actual\nR² = %.4f, RMSE = %.4f", r2, rmse),
+         x = "Time steps", y = "Pressure (mbar)") +
     theme(legend.position = "bottom")
+  ggsave(file.path(output_folder, "predicted_vs_real.png"),
+         p_pred, width = 12, height = 6, dpi = 300)
+
+  loss_df <- tibble(
+    epoch = rep(seq_len(stop_epoch), 2),
+    loss  = c(train_losses, val_losses),
+    split = rep(c("Train", "Validation"), each = stop_epoch)
+  )
+
+  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+    geom_line(linewidth = 0.8) +
+    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+    facet_wrap(~split, scales = "free_y") +
+    labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss (MSE)") +
+    theme(legend.position = "none")
+  ggsave(file.path(output_folder, "learning_curve.png"),
+         p_lc, width = 12, height = 5, dpi = 300)
+
+  save_to_file(
+    train_losses, val_losses, execution_time, times_per_epoch,
+    BATCH_SIZE, hyperparams, stop_epoch, metrics,
+    file_path = file.path(output_folder, "full_results.json")
+  )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CHOICE 3 — Text classification
+# ══════════════════════════════════════════════════════════════════════════════
+} else if (choice == 3) {
+
+  output_folder <- "text/results/rnn"
+  dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
+
+  data <- fread("text/AG News/cleaned_data.csv") %>% as_tibble()
+
+  class_mapping <- data %>%
+    distinct(`Class Index`, category) %>%
+    arrange(`Class Index`) %>%
+    deframe()                        
+
+  NUM_CLASSES <- length(class_mapping)
+
+  set.seed(42)
+  split1 <- initial_split(data, prop = 0.8, strata = `Class Index`)
+  train_val_df <- training(split1)
+  test_df <- testing(split1)
+
+  split2 <- initial_split(train_val_df, prop = 0.9, strata = `Class Index`)
+  train_df <- training(split2)
+  val_df <- testing(split2)
+
+  MAX_VOCAB_SIZE <- 25000L
+  MAX_SEQ_LENGTH <- 100L
+  EMBEDDING_DIM <- 100L
+  BATCH_SIZE <- 128L
+  HIDDEN_SIZE <- 128L
+  NUM_LAYERS <- 2L
+  DROPOUT <- 0.5
+  LEARNING_RATE <- 0.001
+  EPOCHS <- 30L
+
+  # ── text2vec: vocabulary from training set only ────────────────────────────
+  it_train <- itoken(train_df$text, tokenizer = word_tokenizer, progressbar = FALSE)
+
+  vocab <- create_vocabulary(it_train) %>%
+    prune_vocabulary(
+      term_count_min  = 1L,
+      vocab_term_max  = MAX_VOCAB_SIZE - 2L 
+    )
+
+  vectorizer <- vocab_vectorizer(vocab)
+  vocab_size <- nrow(vocab) + 2L              # +2 for PAD/UNK
+
   
-  ggsave(paste0(output_folder, "/learning_curve.png"), p, width = 12, height = 5, dpi = 300)
-  
-  # Evaluation
-  brnn$eval()
-  fc$eval()
-  
-  with_no_grad({
-    y_pred <- as.matrix(forward(X_te$to(DEVICE))$cpu())
-  })
-  
-  y_true <- matrix(test_seq$y, ncol = 1)
-  
-  # Calculate metrics (equivalent to sklearn metrics)
-  ss_res <- sum((y_true - y_pred)^2)
-  ss_tot <- sum((y_true - mean(y_true))^2)
-  r2 <- 1 - ss_res / ss_tot
-  mae <- mean(abs(y_true - y_pred))
-  mse <- mean((y_true - y_pred)^2)
-  rmse <- sqrt(mse)
-  
+  term_to_idx <- setNames(
+    seq_len(nrow(vocab)) + 1L,  
+    vocab$term
+  )
+
+  # ── text2vec tokenize + pad/truncate ──────────────────────────────────────
+  texts_to_matrix <- function(texts, term_idx, max_len) {
+    tokens <- word_tokenizer(texts)
+    t(sapply(tokens, function(toks) {
+      toks <- toks[seq_len(min(length(toks), max_len))]
+      idx  <- term_idx[toks]
+      idx[is.na(idx)] <- 1L                   # UNK
+      length(idx) <- max_len                  # pad with NA → 0
+      idx[is.na(idx)] <- 0L                   # PAD
+      as.integer(idx)
+    }))
+  }
+
+  X_train_mat <- texts_to_matrix(train_df$text, term_to_idx, MAX_SEQ_LENGTH)
+  X_val_mat <- texts_to_matrix(val_df$text, term_to_idx, MAX_SEQ_LENGTH)
+  X_test_mat  <- texts_to_matrix(test_df$text, term_to_idx, MAX_SEQ_LENGTH)
+
+  # ── Label encoding (0-based for Keras sparse_categorical_crossentropy) ─────
+  classes <- sort(unique(data$`Class Index`))
+  encode_lbl <- function(v) match(v, classes) - 1L
+
+  y_train <- encode_lbl(train_df$`Class Index`)
+  y_val <- encode_lbl(val_df$`Class Index`)
+  y_test <- encode_lbl(test_df$`Class Index`)
+
+  model <- keras_model_sequential(name = "RNN_text") %>%
+    layer_embedding(
+      input_dim = vocab_size,
+      output_dim = EMBEDDING_DIM,
+      mask_zero = TRUE,           # honours PAD=0, replaces pack_padded_sequence
+      name = "embedding"
+    ) %>%
+    layer_simple_rnn(
+      units = HIDDEN_SIZE,
+      return_sequences = (NUM_LAYERS > 1),
+      dropout = DROPOUT,
+      activation = "tanh",
+      name = "rnn_1"
+    )
+
+  if (NUM_LAYERS > 1) {
+    for (l in seq_len(NUM_LAYERS - 2)) {
+      model <- model %>%
+        layer_simple_rnn(units = HIDDEN_SIZE, return_sequences = TRUE,
+                         dropout = DROPOUT, activation = "tanh")
+    }
+    model <- model %>%
+      layer_simple_rnn(units = HIDDEN_SIZE, dropout = DROPOUT, activation = "tanh")
+  }
+
+  model <- model %>%
+    layer_dropout(DROPOUT) %>%
+    layer_dense(units = NUM_CLASSES, activation = "softmax")
+
+  model %>% compile(
+    optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
+    loss = "sparse_categorical_crossentropy",
+    metrics = c("accuracy")
+  )
+
+  summary(model)
+
+  # ── Callbacks ──────────────────────────────────────────────────────────────
+  callbacks_list <- list(
+    callback_early_stopping(
+      monitor = "val_loss",
+      patience = 15,
+      restore_best_weights = TRUE,
+      verbose = 1
+    ),
+    callback_reduce_lr_on_plateau(
+      monitor = "val_loss",
+      factor = 0.5,
+      patience = 3,
+      verbose = 1
+    ),
+    callback_model_checkpoint(
+      filepath = file.path(output_folder, "best_model.keras"),
+      monitor = "val_accuracy",
+      save_best_only = TRUE,
+      verbose = 1
+    )
+  )
+
+  cat(blue("\nTraining started...\n"))
+  start_time <- proc.time()["elapsed"]
+
+  history <- model %>% fit(
+    x = X_train_mat,
+    y = y_train,
+    epochs = EPOCHS,
+    batch_size = BATCH_SIZE,
+    validation_data = list(X_val_mat, y_val),
+    callbacks = callbacks_list,
+    verbose = 1
+  )
+
+  execution_time <- proc.time()["elapsed"] - start_time
+
+  train_losses <- history$metrics$loss
+  val_losses <- history$metrics$val_loss
+  train_accuracies <- history$metrics$accuracy * 100
+  val_accuracies <- history$metrics$val_accuracy * 100
+  stop_epoch <- length(train_losses)
+
+  write_json(
+    list(`Train losses` = train_losses,
+         `Val Losses` = val_losses,
+         `stop epoch` = stop_epoch,
+         `execution time` = execution_time,
+         `time per epoch` = times_per_epoch),
+    file.path(output_folder, "train_val_losses.json"),
+    pretty = TRUE, auto_unbox = TRUE
+  )
+
+  # Evaluation 
+  probs_mat  <- predict(model, X_test_mat)                
+  preds <- max.col(probs_mat) - 1L               
+  labels_fct <- factor(unname(class_mapping)[y_test + 1L], levels = unname(class_mapping))
+  preds_fct  <- factor(unname(class_mapping)[preds  + 1L], levels = unname(class_mapping))
+
+  # yardstick metrics
+  eval_df <- tibble(truth = labels_fct, estimate = preds_fct) %>%
+    bind_cols(as_tibble(probs_mat, .name_repair = ~ unname(class_mapping)))
+
+  accuracy  <- accuracy(eval_df, truth, estimate)$.estimate
+  precision <- precision(eval_df, truth, estimate, estimator = "macro")$.estimate
+  recall <- recall(eval_df, truth, estimate, estimator = "macro")$.estimate
+  f1 <- f_meas(eval_df, truth, estimate, estimator = "macro")$.estimate
+
+  # Multiclass ROC-AUC (one-vs-rest, macro — equivalent to sklearn weighted)
+  roc_auc <- roc_auc(eval_df, truth, all_of(unname(class_mapping)),
+                     estimator = "macro_weighted")$.estimate
+
+  # Per-class report
+  report <- per_class_prec_recall_f1(eval_df$truth, eval_df$estimate, class_mapping)
+
+  metrics <- list(
+    accuracy = accuracy,
+    precision = precision,
+    recall = recall,
+    f1 = f1,
+    roc_auc_weighted = roc_auc,
+    classification_report = report
+  )
+
+  cat(sprintf("Accuracy: %.4f | Precision: %.4f | Recall: %.4f | F1: %.4f | AUC: %.4f\n",
+              accuracy, precision, recall, f1, roc_auc))
+
+  # Confusion matrix 
+  cm_df <- conf_mat(eval_df, truth, estimate)$table %>%
+    as_tibble() %>%
+    rename(Predicted = Prediction, Actual = Truth)
+
+  p_cm <- ggplot(cm_df, aes(Actual, Predicted, fill = n)) +
+    geom_tile(colour = "white") +
+    geom_text(aes(label = n), colour = "white", size = 4, fontface = "bold") +
+    scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
+    labs(title = "Confusion matrix — test set") +
+    theme(axis.text.x = element_text(angle = 0), legend.position = "none")
+  ggsave(file.path(output_folder, "confusion_matrix.png"),
+         p_cm, width = 10, height = 8, dpi = 300)
+
+  hyperparams <- list(
+    vocab_size = vocab_size,
+    max_sequence_length = MAX_SEQ_LENGTH,
+    embedding_dim = EMBEDDING_DIM,
+    batch_size = BATCH_SIZE,
+    hidden_size = HIDDEN_SIZE,
+    num_layers = NUM_LAYERS,
+    dropout = DROPOUT,
+    learning_rate = LEARNING_RATE,
+    epochs = EPOCHS
+  )
+
+  # Learning curve
+  loss_df <- tibble(
+    epoch = rep(seq_len(stop_epoch), 2),
+    loss = c(train_losses, val_losses),
+    split = rep(c("Train", "Validation"), each = stop_epoch)
+  )
+
+  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+    geom_line(linewidth = 0.8) +
+    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+    facet_wrap(~split, scales = "free_y") +
+    labs(title = "RNN — learning curve", x = "Epoch", y = "Loss") +
+    theme(legend.position = "none")
+  ggsave(file.path(output_folder, "learning_curve.png"),
+         p_lc, width = 12, height = 5, dpi = 300)
+
   # Save full results
   save_to_file(
-    train_losses, val_losses, execution_time, times_per_epoch, BATCH_SIZE,
-    list(epochs = EPOCHS, hidden_size = hidden_size, num_layers = num_layers,
-         dropout = dropout, learning_rate = learning_rate),
-    stop_epoch,
-    list(`R2 score` = r2, MAE = mae, mse = mse, rmse = rmse),
-    file_path = paste0(output_folder, "/full_results.json")
+    train_losses, val_losses, execution_time, times_per_epoch,
+    BATCH_SIZE, hyperparams, stop_epoch, metrics,
+    file_path = file.path(output_folder, "full_results.json")
   )
-  
-  # Plot predictions vs actual
-  n_points <- min(200, length(y_true))
-  df_pred <- data.frame(
-    TimeSteps = 1:n_points,
-    Actual = y_true[1:n_points, 1],
-    Predicted = y_pred[1:n_points, 1]
-  )
-  
-  p2 <- ggplot(df_pred, aes(x = TimeSteps)) +
-    geom_line(aes(y = Actual, color = "Actual Pressure"), alpha = 0.7, linewidth = 0.8) +
-    geom_line(aes(y = Predicted, color = "Predicted Pressure"), alpha = 0.7, linewidth = 0.8) +
-    scale_color_manual(values = c("Actual Pressure" = "blue", "Predicted Pressure" = "red")) +
-    labs(title = sprintf("BRNN Predicted vs Actual Values\nR² = %.4f, RMSE = %.4f", r2, rmse),
-         x = "Time Steps", y = "Pressure (mbar)") +
-    theme(legend.position = "bottom")
-  
-  ggsave(paste0(output_folder, "/predicted_vs_real.png"), p2, width = 12, height = 6, dpi = 300)
-  
-  cat(sprintf("\nFinal Metrics:\nR²: %.4f\nMAE: %.4f\nMSE: %.4f\nRMSE: %.4f\n", r2, mae, mse, rmse))
 }
