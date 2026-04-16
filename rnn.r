@@ -211,7 +211,10 @@ if (choice %in% c(1, 2)) {
     scale_colour_manual(values = c(Actual = "steelblue", Predicted = "tomato")) +
     labs(title   = sprintf("RNN — Predicted vs Actual\nR² = %.4f, RMSE = %.4f", r2, rmse),
          x = "Time steps", y = "Pressure (mbar)") +
-    theme(legend.position = "bottom")
+    theme(
+      legend.position = "bottom",
+      plot.title = element_text(face = "bold", hjust = 0.5)
+    )
   ggsave(file.path(output_folder, "predicted_vs_real.png"),
          p_pred, width = 12, height = 6, dpi = 300)
 
@@ -221,25 +224,9 @@ if (choice %in% c(1, 2)) {
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
 
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss (MSE)") +
-    theme(legend.position = "none")
-  ggsave(file.path(output_folder, "learning_curve.png"),
-         p_lc, width = 12, height = 5, dpi = 300)
 
-  save_to_file(
-    train_losses, val_losses, execution_time, times_per_epoch,
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CHOICE 3 — Text classification
-# ══════════════════════════════════════════════════════════════════════════════
-} else if (choice == 3) {
+} else {
 
   output_folder <- "text/results/rnn"
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
@@ -449,7 +436,11 @@ if (choice %in% c(1, 2)) {
     geom_text(aes(label = n), colour = "white", size = 4, fontface = "bold") +
     scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
     labs(title = "Confusion matrix — test set") +
-    theme(axis.text.x = element_text(angle = 0), legend.position = "none")
+    theme(
+      axis.text.x = element_text(angle = 0),
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5)
+    )
   ggsave(file.path(output_folder, "confusion_matrix.png"),
          p_cm, width = 10, height = 8, dpi = 300)
 
@@ -472,19 +463,22 @@ if (choice %in% c(1, 2)) {
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
 
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "RNN — learning curve", x = "Epoch", y = "Loss") +
-    theme(legend.position = "none")
-  ggsave(file.path(output_folder, "learning_curve.png"),
-         p_lc, width = 12, height = 5, dpi = 300)
-
-  # Save full results
-  save_to_file(
-    train_losses, val_losses, execution_time,
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
 }
+
+p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+  geom_line(linewidth = 0.8) +
+  scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+  facet_wrap(~split, scales = "free_y") +
+  labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss") +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+  )
+ggsave(file.path(output_folder, "learning_curve.png"),
+        p_lc, width = 12, height = 5, dpi = 300)
+
+save_to_file(
+  train_losses, val_losses, execution_time,
+  BATCH_SIZE, hyperparams, stop_epoch, metrics,
+  file_path = file.path(output_folder, "full_results.json")
+)
