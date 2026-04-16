@@ -483,7 +483,7 @@ if (choice %in% c(1, 2)) {
 
   # Save full results
   save_to_file(
-    train_losses, val_losses, execution_time, times_per_epoch,
+    train_losses, val_losses, execution_time,
     BATCH_SIZE, hyperparams, stop_epoch, metrics,
     file_path = file.path(output_folder, "full_results.json")
   )

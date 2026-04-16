@@ -22,18 +22,18 @@ cat("Choose a number for a specific task:\n",
     "3. Text classification\n")
 choice <- as.integer(readline())
 
-train_losses    <- c()
-val_losses      <- c()
+train_losses <- c()
+val_losses <- c()
 times_per_epoch <- c()
 
 if (choice %in% c(1, 2)) {
 
   if (choice == 1) {
     output_folder <- "time_series/results/lstm/Univariate"
-    csv_path      <- "time_series/datasets/pressure_lags.csv"
+    csv_path <- "time_series/datasets/pressure_lags.csv"
   } else {
     output_folder <- "time_series/results/lstm/multivariate"
-    csv_path      <- "time_series/datasets/4features_lags.csv"
+    csv_path <- "time_series/datasets/4features_lags.csv"
   }
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
 
@@ -42,35 +42,35 @@ if (choice %in% c(1, 2)) {
     mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
     arrange(`Date Time`)
 
-  TARGET   <- "p (mbar)"
+  TARGET <- "p (mbar)"
   FEATURES <- setdiff(names(data), c("Date Time", TARGET))
 
-  split_point  <- floor(nrow(data) * 0.8)
+  split_point <- floor(nrow(data) * 0.8)
 
   train_val_df <- data[1:split_point, ]
   test_df <- data[(split_point + 1):nrow(data), ]
 
-  val_n    <- floor(nrow(train_val_df) * 0.125)
+  val_n <- floor(nrow(train_val_df) * 0.125)
   train_df <- train_val_df[1:(nrow(train_val_df) - val_n), ]
-  val_df   <- train_val_df[(nrow(train_val_df) - val_n + 1):nrow(train_val_df), ]
+  val_df <- train_val_df[(nrow(train_val_df) - val_n + 1):nrow(train_val_df), ]
 
   rec <- readRDS(paste0("time_series/results/scaler_", choice, ".rds"))
 
   X_train <- bake(rec, train_df) %>% select(all_of(FEATURES)) %>% as.matrix()
-  X_val   <- bake(rec, val_df)   %>% select(all_of(FEATURES)) %>% as.matrix()
-  X_test  <- bake(rec, test_df)  %>% select(all_of(FEATURES)) %>% as.matrix()
+  X_val <- bake(rec, val_df)   %>% select(all_of(FEATURES)) %>% as.matrix()
+  X_test <- bake(rec, test_df)  %>% select(all_of(FEATURES)) %>% as.matrix()
   y_train <- train_df[[TARGET]]
-  y_val   <- val_df[[TARGET]]
-  y_test  <- test_df[[TARGET]]
+  y_val <- val_df[[TARGET]]
+  y_test <- test_df[[TARGET]]
 
   create_sequences <- function(X, y, seq_len = 24) {
-    n   <- nrow(X)
+    n <- nrow(X)
     idx <- seq_len(n - seq_len)
-    Xs  <- array(0, dim = c(length(idx), seq_len, ncol(X)))
-    ys  <- numeric(length(idx))
+    Xs <- array(0, dim = c(length(idx), seq_len, ncol(X)))
+    ys <- numeric(length(idx))
     for (i in idx) {
       Xs[i, , ] <- X[i:(i + seq_len - 1), ]
-      ys[i]     <- y[i + seq_len]
+      ys[i] <- y[i + seq_len]
     }
     list(X = Xs, y = ys)
   }
@@ -81,34 +81,34 @@ if (choice %in% c(1, 2)) {
   vl <- create_sequences(X_val,   y_val,   SEQ_LENGTH)
   te <- create_sequences(X_test,  y_test,  SEQ_LENGTH)
 
-  BATCH_SIZE    <- 64L
-  EPOCHS   <- 50L
-  HIDDEN_SIZE   <- 64L
-  NUM_LAYERS    <- 2L
-  DROPOUT  <- 0.2
+  BATCH_SIZE <- 64L
+  EPOCHS <- 50L
+  HIDDEN_SIZE <- 64L
+  NUM_LAYERS <- 2L
+  DROPOUT <- 0.2
   LEARNING_RATE <- 0.001
-  input_size    <- dim(tr$X)[3]
+  input_size <- dim(tr$X)[3]
 
   hyperparams <- list(
-    epochs   = EPOCHS,
-    hidden_size   = HIDDEN_SIZE,
-    num_layers    = NUM_LAYERS,
-    dropout  = DROPOUT,
+    epochs = EPOCHS,
+    hidden_size = HIDDEN_SIZE,
+    num_layers = NUM_LAYERS,
+    dropout = DROPOUT,
     learning_rate = LEARNING_RATE
   )
 
   build_lstm_ts <- function() {
     inputs <- layer_input(shape = c(SEQ_LENGTH, input_size))
-    x      <- inputs
+    x <- inputs
 
     for (l in seq_len(NUM_LAYERS)) {
       return_seq <- (l < NUM_LAYERS)
       x <- x %>%
-   layer_lstm(
- units   = HIDDEN_SIZE,
- return_sequences = return_seq,
- dropout = DROPOUT
-   )
+      layer_lstm(
+          units = HIDDEN_SIZE,
+          return_sequences = return_seq,
+          dropout = DROPOUT
+      )
     }
 
     outputs <- x %>% layer_dense(units = 1)
@@ -119,27 +119,27 @@ if (choice %in% c(1, 2)) {
 
   model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss      = "mse"
+    loss = "mse"
   )
 
   callbacks_list <- list(
     callback_early_stopping(
-      monitor     = "val_loss",
-      patience    = 7,
+      monitor = "val_loss",
+      patience = 7,
       restore_best_weights = TRUE,
-      verbose     = 1
+      verbose = 1
     ),
     callback_reduce_lr_on_plateau(
-      monitor  = "val_loss",
-      factor   = 0.5,
+      monitor = "val_loss",
+      factor = 0.5,
       patience = 3,
-      verbose  = 1
+      verbose = 1
     ),
     callback_model_checkpoint(
-      filepath  = file.path(output_folder, "lstm_best.keras"),
-      monitor   = "val_loss",
+      filepath = file.path(output_folder, "lstm_best.keras"),
+      monitor = "val_loss",
       save_best_only = TRUE,
-      verbose   = 1
+      verbose = 1
     )
   )
 
@@ -147,25 +147,25 @@ if (choice %in% c(1, 2)) {
   start_time <- proc.time()["elapsed"]
 
   history <- model %>% fit(
-    x      = tr$X,
-    y      = tr$y,
+    x = tr$X,
+    y = tr$y,
     epochs = EPOCHS,
-    batch_size      = BATCH_SIZE,
+    batch_size = BATCH_SIZE,
     validation_data = list(vl$X, vl$y),
-    callbacks  = callbacks_list,
-    verbose    = 1
+    callbacks = callbacks_list,
+    verbose = 1
   )
 
-  execution_time  <- proc.time()["elapsed"] - start_time
-  train_losses    <- history$metrics$loss
-  val_losses      <- history$metrics$val_loss
-  stop_epoch      <- length(train_losses)
+  execution_time <- proc.time()["elapsed"] - start_time
+  train_losses <- history$metrics$loss
+  val_losses <- history$metrics$val_loss
+  stop_epoch <- length(train_losses)
   times_per_epoch <- rep(fmt_time(execution_time / stop_epoch), stop_epoch)
 
   write_json(
-    list(`Train losses`   = train_losses,
-    `Val Losses`     = val_losses,
-    `stop epoch`     = stop_epoch,
+    list(`Train losses` = train_losses,
+    `Val Losses` = val_losses,
+    `stop epoch` = stop_epoch,
     `execution time` = execution_time,
     `time per epoch` = times_per_epoch),
     file.path(output_folder, "train_val_losses.json"),
@@ -176,19 +176,19 @@ if (choice %in% c(1, 2)) {
   y_true <- te$y
 
   results_df <- tibble(truth = y_true, estimate = y_pred)
-  r2   <- rsq(results_df,  truth, estimate)$.estimate
-  mae  <- mae(results_df,  truth, estimate)$.estimate
+  r2 <- rsq(results_df,  truth, estimate)$.estimate
+  mae <- mae(results_df,  truth, estimate)$.estimate
   rmse <- rmse(results_df, truth, estimate)$.estimate
-  mse  <- rmse ^ 2
+  mse <- rmse ^ 2
 
   metrics <- list(`R2 score` = r2, MAE = mae, mse = mse, rmse = rmse)
   cat(sprintf("\nR²: %.4f | MAE: %.4f | MSE: %.4f | RMSE: %.4f\n",
-     r2, mae, mse, rmse))
+              r2, mae, mse, rmse))
 
-  n_show  <- min(200, length(y_true))
+  n_show <- min(200, length(y_true))
   pred_df <- tibble(
-    step      = 1:n_show,
-    Actual    = y_true[1:n_show],
+    step = 1:n_show,
+    Actual = y_true[1:n_show],
     Predicted = y_pred[1:n_show]
   ) %>% pivot_longer(-step, names_to = "Series", values_to = "Value")
 
@@ -201,34 +201,19 @@ if (choice %in% c(1, 2)) {
     ) +
     theme(
       legend.position = "bottom",
-      axis.text.x = element_text(angle = 0, hjust = 0.5))
+      plot.title = element_text(size = 14, face = "bold"),
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
+    )
   ggsave(file.path(output_folder, "predicted_vs_real.png"),
     p_pred, width = 12, height = 6, dpi = 300)
 
   loss_df <- tibble(
     epoch = rep(seq_len(stop_epoch), 2),
-    loss  = c(train_losses, val_losses),
+    loss = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
 
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss (MSE)") +
-    theme(
-      legend.position = "none",
-      axis.text.x = element_text(angle = 0, hjust = 0.5))
-  ggsave(file.path(output_folder, "learning_curve.png"),
-    p_lc, width = 12, height = 5, dpi = 300)
-
-  save_to_file(
-    train_losses, val_losses, execution_time, times_per_epoch,
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
-
-} else if (choice == 3) {
+} else {
 
   output_folder <- "text/results/lstm"
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
@@ -437,6 +422,7 @@ if (choice %in% c(1, 2)) {
     scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
     labs(title = "Confusion matrix — test set") +
     theme(
+      plot.title = element_text(size = 14, face = "bold"),
       axis.text.x = element_text(angle = 0, hjust = 0.5),
       legend.position = "none")
   ggsave(file.path(output_folder, "confusion_matrix.png"),
@@ -459,21 +445,23 @@ if (choice %in% c(1, 2)) {
     loss  = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
-
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss") +
-    theme(
-      legend.position = "none",
-      axis.text.x = element_text(angle = 0, hjust = 0.5))
-  ggsave(file.path(output_folder, "learning_curve.png"),
-    p_lc, width = 12, height = 5, dpi = 300)
-
-  save_to_file(
-    train_losses, val_losses, execution_time, times_per_epoch,
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
 }
+
+p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+  geom_line(linewidth = 0.8) +
+  scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+  facet_wrap(~split, scales = "free_y") +
+  labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss (MSE)") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    legend.position = "none",
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
+ggsave(file.path(output_folder, "learning_curve.png"),
+  p_lc, width = 12, height = 5, dpi = 300)
+
+save_to_file(
+  train_losses, val_losses, execution_time,
+  BATCH_SIZE, hyperparams, stop_epoch, metrics,
+  file_path = file.path(output_folder, "full_results.json")
+)

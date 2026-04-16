@@ -1,4 +1,4 @@
-save_to_file <- function(train_losses, val_losses, execution_time, times_per_epoch, batch_size,
+save_to_file <- function(train_losses, val_losses, execution_time, batch_size,
                         model_params, stop_epoch, metrics,
                         file_path="results/full_results.json") {
     best_train_loss <- if (length(train_losses) > 0) min(train_losses) else NULL
@@ -22,7 +22,6 @@ save_to_file <- function(train_losses, val_losses, execution_time, times_per_epo
         "loss_history" = list(
             "train" = round(train_losses, 6),
             "validation"= round(val_losses, 6),
-            "time per epoch" = times_per_epoch
         )
     )
 
