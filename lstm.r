@@ -24,7 +24,6 @@ cat("Choose a number for a specific task:\n",
 choice <- 1
 train_losses <- c()
 val_losses <- c()
-times_per_epoch <- c()
 
 if (choice %in% c(1, 2)) {
 
@@ -160,14 +159,12 @@ if (choice %in% c(1, 2)) {
   train_losses <- history$metrics$loss
   val_losses <- history$metrics$val_loss
   stop_epoch <- length(train_losses)
-  times_per_epoch <- rep(fmt_time(execution_time / stop_epoch), stop_epoch)
 
   write_json(
     list(`Train losses` = train_losses,
     `Val Losses` = val_losses,
     `stop epoch` = stop_epoch,
-    `execution time` = execution_time,
-    `time per epoch` = times_per_epoch),
+    `execution time` = execution_time),
     file.path(output_folder, "train_val_losses.json"),
     pretty = TRUE, auto_unbox = TRUE
   )
@@ -212,26 +209,6 @@ if (choice %in% c(1, 2)) {
     loss = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
-
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss") +
-    theme(
-      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-      legend.position = "none",
-      axis.text.x = element_text(angle = 0, hjust = 0.5)
-    )
-  ggsave(file.path(output_folder, "learning_curve.png"),
-    p_lc, width = 12, height = 5, dpi = 300)
-
-  save_to_file(
-    train_losses, val_losses, execution_time,
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
-
 } else {
 
   output_folder <- "text/results/lstm"
@@ -335,30 +312,30 @@ if (choice %in% c(1, 2)) {
 
   model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss      = "sparse_categorical_crossentropy",
-    metrics   = c("accuracy")
+    loss = "sparse_categorical_crossentropy",
+    metrics = c("accuracy")
   )
 
   summary(model)
 
   callbacks_list <- list(
     callback_early_stopping(
-      monitor     = "val_loss",
-      patience    = 15,
+      monitor = "val_loss",
+      patience = 15,
       restore_best_weights = TRUE,
-      verbose     = 1
+      verbose = 1
     ),
     callback_reduce_lr_on_plateau(
-      monitor  = "val_loss",
-      factor   = 0.5,
+      monitor = "val_loss",
+      factor = 0.5,
       patience = 3,
-      verbose  = 1
+      verbose = 1
     ),
     callback_model_checkpoint(
-      filepath  = file.path(output_folder, "best_model.keras"),
-      monitor   = "val_accuracy",
+      filepath = file.path(output_folder, "best_model.keras"),
+      monitor = "val_accuracy",
       save_best_only = TRUE,
-      verbose   = 1
+      verbose = 1
     )
   )
 
@@ -366,65 +343,60 @@ if (choice %in% c(1, 2)) {
   start_time <- proc.time()["elapsed"]
 
   history <- model %>% fit(
-    x      = X_train_mat,
-    y      = y_train,
+    x = X_train_mat,
+    y = y_train,
     epochs = EPOCHS,
-    batch_size      = BATCH_SIZE,
+    batch_size = BATCH_SIZE,
     validation_data = list(X_val_mat, y_val),
-    callbacks  = callbacks_list,
-    verbose    = 1
+    callbacks = callbacks_list,
+    verbose = 1
   )
 
-  execution_time   <- proc.time()["elapsed"] - start_time
-  train_losses     <- history$metrics$loss
-  val_losses  <- history$metrics$val_loss
-  train_accuracies <- history$metrics$accuracy * 100
-  val_accuracies   <- history$metrics$val_accuracy * 100
-  stop_epoch  <- length(train_losses)
-  times_per_epoch  <- rep(fmt_time(execution_time / stop_epoch), stop_epoch)
+  execution_time <- proc.time()["elapsed"] - start_time
+  train_losses <- history$metrics$loss
+  val_losses <- history$metrics$val_loss
+  stop_epoch <- length(train_losses)
 
   write_json(
     list(`Train losses`   = train_losses,
-    `Val Losses`     = val_losses,
-    `stop epoch`     = stop_epoch,
-    `execution time` = execution_time,
-    `time per epoch` = times_per_epoch),
+    `Val Losses` = val_losses,
+    `stop epoch` = stop_epoch,
+    `execution time` = execution_time),
     file.path(output_folder, "train_val_losses.json"),
     pretty = TRUE, auto_unbox = TRUE
   )
 
-  probs_mat  <- predict(model, X_test_mat)
-  preds      <- max.col(probs_mat) - 1L
+  probs_mat <- predict(model, X_test_mat)
+  preds <- max.col(probs_mat) - 1L
   labels_fct <- factor(unname(class_mapping)[y_test + 1L], levels = unname(class_mapping))
-  preds_fct  <- factor(unname(class_mapping)[preds  + 1L], levels = unname(class_mapping))
+  preds_fct <- factor(unname(class_mapping)[preds  + 1L], levels = unname(class_mapping))
 
   eval_df <- tibble(truth = labels_fct, estimate = preds_fct) %>%
     bind_cols(as_tibble(probs_mat, .name_repair = ~ unname(class_mapping)))
 
-  accuracy  <- accuracy(eval_df,  truth, estimate)$.estimate
+  accuracy <- accuracy(eval_df, truth, estimate)$.estimate
   precision <- precision(eval_df, truth, estimate, estimator = "macro")$.estimate
-  recall    <- recall(eval_df,    truth, estimate, estimator = "macro")$.estimate
-  f1   <- f_meas(eval_df,    truth, estimate, estimator = "macro")$.estimate
-  roc_auc   <- roc_auc(eval_df,   truth, all_of(unname(class_mapping)),
-      estimator = "macro_weighted")$.estimate
+  recall <- recall(eval_df, truth, estimate, estimator = "macro")$.estimate
+  f1 <- f_meas(eval_df, truth, estimate, estimator = "macro")$.estimate
+  roc_auc <- roc_auc(eval_df,   truth, all_of(unname(class_mapping)), estimator = "macro_weighted")$.estimate
 
   report <- lapply(unname(class_mapping), function(cls) {
-    tp   <- sum(preds_fct == cls & labels_fct == cls)
-    fp   <- sum(preds_fct == cls & labels_fct != cls)
-    fn   <- sum(preds_fct != cls & labels_fct == cls)
-    pr   <- if ((tp + fp) > 0) tp / (tp + fp) else 0
-    re   <- if ((tp + fn) > 0) tp / (tp + fn) else 0
+    tp <- sum(preds_fct == cls & labels_fct == cls)
+    fp <- sum(preds_fct == cls & labels_fct != cls)
+    fn <- sum(preds_fct != cls & labels_fct == cls)
+    pr <- if ((tp + fp) > 0) tp / (tp + fp) else 0
+    re <- if ((tp + fn) > 0) tp / (tp + fn) else 0
     f1_c <- if ((pr + re) > 0) 2 * pr * re / (pr + re) else 0
     list(precision = pr, recall = re, f1_score = f1_c,
     support = sum(labels_fct == cls))
   }) %>% setNames(unname(class_mapping))
 
   metrics <- list(
-    accuracy     = accuracy,
-    precision    = precision,
-    recall  = recall,
-    f1  = f1,
-    roc_auc_weighted      = roc_auc,
+    accuracy = accuracy,
+    precision = precision,
+    recall = recall,
+    f1 = f1,
+    roc_auc_weighted = roc_auc,
     classification_report = report
   )
 
@@ -464,8 +436,8 @@ if (choice %in% c(1, 2)) {
     loss  = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
-
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+}
+p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
   geom_line(linewidth = 0.8) +
   scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
   facet_wrap(~split, scales = "free_y") +
@@ -475,12 +447,11 @@ if (choice %in% c(1, 2)) {
     legend.position = "none",
     axis.text.x = element_text(angle = 0, hjust = 0.5)
   )
-  ggsave(file.path(output_folder, "learning_curve.png"),
-    p_lc, width = 12, height = 5, dpi = 300)
+ggsave(file.path(output_folder, "learning_curve.png"),
+  p_lc, width = 12, height = 5, dpi = 300)
 
-  save_to_file(
-    train_losses, val_losses, execution_time,
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
-}
+save_to_file(
+  train_losses, val_losses, execution_time,
+  BATCH_SIZE, hyperparams, stop_epoch, metrics,
+  file_path = file.path(output_folder, "full_results.json")
+)

@@ -21,7 +21,7 @@ save_to_file <- function(train_losses, val_losses, execution_time, batch_size,
         "test_metrics" = metrics,
         "loss_history" = list(
             "train" = round(train_losses, 6),
-            "validation"= round(val_losses, 6),
+            "validation"= round(val_losses, 6)
         )
     )
 

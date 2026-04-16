@@ -24,7 +24,6 @@ cat("Choose a number for a specific task:\n",
 choice <- 1
 train_losses <- c()
 val_losses <- c()
-times_per_epoch <- c()
 
 if (choice %in% c(1, 2)) {
 
@@ -160,7 +159,6 @@ if (choice %in% c(1, 2)) {
   train_losses  <- history$metrics$loss
   val_losses  <- history$metrics$val_loss
   stop_epoch  <- length(train_losses)
-  times_per_epoch <- rep(fmt_time(execution_time / stop_epoch), stop_epoch)
 
   write_json(
   list(`Train losses` = train_losses, `Val Losses` = val_losses),
@@ -208,26 +206,6 @@ if (choice %in% c(1, 2)) {
   loss  = c(train_losses, val_losses),
   split = rep(c("Train", "Validation"), each = stop_epoch)
   )
-
-    p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "GRU — Learning curve", x = "Epoch", y = "Loss") +
-    theme(
-      legend.position = "none",
-      axis.text.x = element_text(angle = 0, hjust = 0.5),
-      plot.title = element_text(hjust = 0.5)
-    )
-  ggsave(file.path(output_folder, "learning_curve.png"),
-    p_lc, width = 12, height = 5, dpi = 300)
-
-  save_to_file(
-    train_losses, val_losses, execution_time, 
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
-
 } else {
 
   output_folder <- "text/results/gru"
@@ -374,17 +352,13 @@ if (choice %in% c(1, 2)) {
   execution_time <- proc.time()["elapsed"] - start_time
   train_losses   <- history$metrics$loss
   val_losses   <- history$metrics$val_loss
-  train_accuracies <- history$metrics$accuracy * 100
-  val_accuracies <- history$metrics$val_accuracy * 100
   stop_epoch   <- length(train_losses)
-  times_per_epoch  <- rep(fmt_time(execution_time / stop_epoch), stop_epoch)
 
   write_json(
   list(`Train losses` = train_losses,
    `Val Losses`   = val_losses,
    `stop epoch`   = stop_epoch,
-   `execution time` = execution_time,
-   `time per epoch` = times_per_epoch),
+   `execution time` = execution_time),
   file.path(output_folder, "train_val_losses.json"),
   pretty = TRUE, auto_unbox = TRUE
   )
@@ -461,23 +435,22 @@ if (choice %in% c(1, 2)) {
   loss  = c(train_losses, val_losses),
   split = rep(c("Train", "Validation"), each = stop_epoch)
   )
-
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-    geom_line(linewidth = 0.8) +
-    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-    facet_wrap(~split, scales = "free_y") +
-    labs(title = "GRU — Learning curve", x = "Epoch", y = "Loss") +
-    theme(
-      legend.position = "none",
-      axis.text.x = element_text(angle = 0, hjust = 0.5),
-      plot.title = element_text(hjust = 0.5)
-    )
-  ggsave(file.path(output_folder, "learning_curve.png"),
-    p_lc, width = 12, height = 5, dpi = 300)
-
-  save_to_file(
-    train_losses, val_losses, execution_time, 
-    BATCH_SIZE, hyperparams, stop_epoch, metrics,
-    file_path = file.path(output_folder, "full_results.json")
-  )
 }
+p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+  geom_line(linewidth = 0.8) +
+  scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+  facet_wrap(~split, scales = "free_y") +
+  labs(title = "GRU — Learning curve", x = "Epoch", y = "Loss") +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    plot.title = element_text(hjust = 0.5)
+  )
+ggsave(file.path(output_folder, "learning_curve.png"),
+  p_lc, width = 12, height = 5, dpi = 300)
+
+save_to_file(
+  train_losses, val_losses, execution_time, 
+  BATCH_SIZE, hyperparams, stop_epoch, metrics,
+  file_path = file.path(output_folder, "full_results.json")
+)
