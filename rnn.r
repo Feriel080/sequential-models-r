@@ -23,17 +23,19 @@ cat("Choose a number for a specific task:\n",
     "1. Time series forecasting - Univariate.\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
-choice <- as.integer(readline())
-
+# choice <- as.integer(readline())
+choice <- 1
 train_losses <- c()
 val_losses <- c()
 
 if (choice %in% c(1, 2)) {
 
   if (choice == 1) {
+    cat("Time series forecasting - Univariate.")
     output_folder <- "time_series/results/rnn/Univariate"
     csv_path <- "time_series/datasets/pressure_lags.csv"
   } else {
+    cat("Time series forecasting - Multivariate.")
     output_folder <- "time_series/results/rnn/multivariate"
     csv_path <- "time_series/datasets/4features_lags.csv"
   }
@@ -220,7 +222,7 @@ if (choice %in% c(1, 2)) {
   )
 
 } else {
-
+  cat("==========Text classification==========")
   output_folder <- "text/results/rnn"
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
 

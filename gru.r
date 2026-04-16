@@ -28,11 +28,13 @@ val_losses <- c()
 if (choice %in% c(1, 2)) {
 
   if (choice == 1) {
-  output_folder <- "time_series/results/gru/Univariate"
-  csv_path <- "time_series/datasets/pressure_lags.csv"
+    cat("Time series forecasting - Univariate.")
+    output_folder <- "time_series/results/gru/Univariate"
+    csv_path <- "time_series/datasets/pressure_lags.csv"
   } else {
-  output_folder <- "time_series/results/gru/multivariate"
-  csv_path <- "time_series/datasets/4features_lags.csv"
+    cat("Time series forecasting - Multivariate.")
+    output_folder <- "time_series/results/gru/multivariate"
+    csv_path <- "time_series/datasets/4features_lags.csv"
   }
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
 
@@ -207,7 +209,7 @@ if (choice %in% c(1, 2)) {
   split = rep(c("Train", "Validation"), each = stop_epoch)
   )
 } else {
-
+  cat("==========Text classification==========")
   output_folder <- "text/results/gru"
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
 
