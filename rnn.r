@@ -31,11 +31,11 @@ val_losses <- c()
 if (choice %in% c(1, 2)) {
 
   if (choice == 1) {
-    cat("Time series forecasting - Univariate.")
+    cat("Time series forecasting - Univariate.\n")
     output_folder <- "time_series/results/rnn/Univariate"
     csv_path <- "time_series/datasets/pressure_lags.csv"
   } else {
-    cat("Time series forecasting - Multivariate.")
+    cat("Time series forecasting - Multivariate.\n")
     output_folder <- "time_series/results/rnn/multivariate"
     csv_path <- "time_series/datasets/4features_lags.csv"
   }
@@ -222,7 +222,7 @@ if (choice %in% c(1, 2)) {
   )
 
 } else {
-  cat("==========Text classification==========")
+  cat("==========Text classification==========\n")
   output_folder <- "text/results/rnn"
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
 

@@ -50,5 +50,5 @@ save_to_file <- function(train_losses, val_losses, execution_time, batch_size,
 
     jsonlite::write_json(data, file_path, pretty = TRUE, auto_unbox = TRUE)
 
-    cat("Results have been saved.")
+    cat("Results have been saved.\n")
 }
