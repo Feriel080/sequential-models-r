@@ -45,15 +45,10 @@ if (choice %in% c(1, 2)) {
   TARGET <- "p (mbar)"
   FEATURES <- setdiff(names(data), c("Date Time", TARGET))
 
-  splits <- time_series_split(
-  data,
-  date_var = `Date Time`,
-  assess = "20%",
-  cumulative = TRUE
-  )
+  split_point  <- floor(nrow(data) * 0.8)
 
-  train_val_df <- training(splits)
-  test_df <- testing(splits)
+  train_val_df <- data[1:split_point, ]
+  test_df <- data[(split_point + 1):nrow(data), ]
 
   val_n <- floor(nrow(train_val_df) * 0.125)
   train_df <- train_val_df[1:(nrow(train_val_df) - val_n), ]
@@ -200,7 +195,10 @@ if (choice %in% c(1, 2)) {
   title = sprintf("GRU — Predicted vs Actual\nR² = %.4f, RMSE = %.4f", r2, rmse),
   x = "Time steps", y = "Pressure (mbar)"
   ) +
-  theme(legend.position = "bottom")
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
   ggsave(file.path(output_folder, "predicted_vs_real.png"),
    p_pred, width = 12, height = 6, dpi = 300)
 
@@ -215,7 +213,10 @@ if (choice %in% c(1, 2)) {
   scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
   facet_wrap(~split, scales = "free_y") +
   labs(title = "GRU — Learning curve", x = "Epoch", y = "Loss (MSE)") +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
   ggsave(file.path(output_folder, "learning_curve.png"),
    p_lc, width = 12, height = 5, dpi = 300)
 
@@ -433,7 +434,10 @@ if (choice %in% c(1, 2)) {
   geom_text(aes(label = n), colour = "white", size = 4, fontface = "bold") +
   scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
   labs(title = "Confusion matrix — test set") +
-  theme(axis.text.x = element_text(angle = 0), legend.position = "none")
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.position = "none"
+  )
   ggsave(file.path(output_folder, "confusion_matrix.png"),
    p_cm, width = 10, height = 8, dpi = 300)
 
@@ -460,7 +464,10 @@ if (choice %in% c(1, 2)) {
   scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
   facet_wrap(~split, scales = "free_y") +
   labs(title = "GRU — Learning curve", x = "Epoch", y = "Loss") +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
   ggsave(file.path(output_folder, "learning_curve.png"),
    p_lc, width = 12, height = 5, dpi = 300)
 

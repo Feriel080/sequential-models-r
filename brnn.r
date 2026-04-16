@@ -47,19 +47,13 @@ if (choice %in% c(1, 2)) {
     mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
     arrange(`Date Time`)
 
-  TARGET   <- "p (mbar)"
+  TARGET <- "p (mbar)"
   FEATURES <- setdiff(names(data), c("Date Time", TARGET))
 
-  splits <- time_series_split(
-    data,
-    date_var = `Date Time`,
-    assess = "20%",   
-    skip = 0,
-    cumulative = TRUE
-  )
+  split_point <- floor(nrow(data) * 0.8)
 
-  train_val_df <- training(splits)
-  test_df <- testing(splits)
+  train_val_df <- data[1:split_point, ]
+  test_df <- data[(split_point + 1):nrow(data), ]
 
   # Inner val split (last 12.5 % of train_val)
   val_n <- floor(nrow(train_val_df) * 0.125)
@@ -76,13 +70,13 @@ if (choice %in% c(1, 2)) {
   y_test <- test_df[[TARGET]]
 
   create_sequences <- function(X, y, seq_len = 24) {
-    n   <- nrow(X)
+    n <- nrow(X)
     idx <- seq_len(n - seq_len)
-    Xs  <- array(0, dim = c(length(idx), seq_len, ncol(X)))
-    ys  <- numeric(length(idx))
+    Xs <- array(0, dim = c(length(idx), seq_len, ncol(X)))
+    ys <- numeric(length(idx))
     for (i in idx) {
       Xs[i, , ] <- X[i:(i + seq_len - 1), ]
-      ys[i]     <- y[i + seq_len]
+      ys[i] <- y[i + seq_len]
     }
     list(X = Xs, y = ys)
   }
@@ -120,10 +114,10 @@ if (choice %in% c(1, 2)) {
       x <- x %>%
         bidirectional(
           layer_simple_rnn(
-            units            = HIDDEN_SIZE,
+            units = HIDDEN_SIZE,
             return_sequences = return_seq,
-            dropout          = DROPOUT,
-            activation       = "tanh"
+            dropout = DROPOUT,
+            activation = "tanh"
           )
         )
     }
@@ -136,7 +130,7 @@ if (choice %in% c(1, 2)) {
 
   model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss      = "mse"
+    loss = "mse"
   )
 
   callbacks_list <- list(
@@ -147,10 +141,10 @@ if (choice %in% c(1, 2)) {
       verbose = 1
     ),
     callback_reduce_lr_on_plateau(
-      monitor  = "val_loss",
+      monitor = "val_loss",
       factor = 0.5,
       patience = 3,
-      verbose  = 1
+      verbose = 1
     ),
     callback_model_checkpoint(
       filepath = file.path(output_folder, "brnn_best.keras"),
@@ -200,23 +194,24 @@ if (choice %in% c(1, 2)) {
 
   n_show <- min(200, length(y_true))
   pred_df <- tibble(
-    step      = 1:n_show,
-    Actual    = y_true[1:n_show],
+    step = 1:n_show,
+    Actual = y_true[1:n_show],
     Predicted = y_pred[1:n_show]
   ) %>% pivot_longer(-step, names_to = "Series", values_to = "Value")
 
   p_pred <- ggplot(pred_df, aes(step, Value, colour = Series)) +
     geom_line(alpha = 0.75) +
     scale_colour_manual(values = c(Actual = "steelblue", Predicted = "tomato")) +
-    labs(title   = sprintf("BRNN — Predicted vs Actual\nR² = %.4f, RMSE = %.4f", r2, rmse),
+    labs(title = sprintf("BRNN — Predicted vs Actual\nR² = %.4f, RMSE = %.4f", r2, rmse),
          x = "Time steps", y = "Pressure (mbar)") +
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 0, hjust = 0.5))
   ggsave(file.path(output_folder, "predicted_vs_real.png"),
          p_pred, width = 12, height = 6, dpi = 300)
 
   loss_df <- tibble(
     epoch = rep(seq_len(stop_epoch), 2),
-    loss  = c(train_losses, val_losses),
+    loss = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
 
@@ -225,7 +220,10 @@ if (choice %in% c(1, 2)) {
     scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
     facet_wrap(~split, scales = "free_y") +
     labs(title = "BRNN — Learning curve", x = "Epoch", y = "Loss (MSE)") +
-    theme(legend.position = "none")
+    theme(
+      legend.position = "none",
+      axis.text.x = element_text(angle = 0, hjust = 0.5))
+
   ggsave(file.path(output_folder, "learning_curve.png"),
          p_lc, width = 12, height = 5, dpi = 300)
 
@@ -276,8 +274,8 @@ if (choice %in% c(1, 2)) {
 
   vocab <- create_vocabulary(it_train) %>%
     prune_vocabulary(
-      term_count_min  = 1L,
-      vocab_term_max  = MAX_VOCAB_SIZE - 2L 
+      term_count_min = 1L,
+      vocab_term_max = MAX_VOCAB_SIZE - 2L 
     )
 
   vectorizer <- vocab_vectorizer(vocab)
@@ -294,7 +292,7 @@ if (choice %in% c(1, 2)) {
     tokens <- word_tokenizer(texts)
     t(sapply(tokens, function(toks) {
       toks <- toks[seq_len(min(length(toks), max_len))]
-      idx  <- term_idx[toks]
+      idx <- term_idx[toks]
       idx[is.na(idx)] <- 1L                   # UNK
       length(idx) <- max_len                  # pad with NA → 0
       idx[is.na(idx)] <- 0L                   # PAD
@@ -304,7 +302,7 @@ if (choice %in% c(1, 2)) {
 
   X_train_mat <- texts_to_matrix(train_df$text, term_to_idx, MAX_SEQ_LENGTH)
   X_val_mat <- texts_to_matrix(val_df$text, term_to_idx, MAX_SEQ_LENGTH)
-  X_test_mat  <- texts_to_matrix(test_df$text, term_to_idx, MAX_SEQ_LENGTH)
+  X_test_mat <- texts_to_matrix(test_df$text, term_to_idx, MAX_SEQ_LENGTH)
 
   # ── Label encoding (0-based for Keras sparse_categorical_crossentropy) ─────
   classes <- sort(unique(data$`Class Index`))
@@ -345,8 +343,8 @@ if (choice %in% c(1, 2)) {
 
   model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss      = "sparse_categorical_crossentropy",
-    metrics   = c("accuracy")
+    loss = "sparse_categorical_crossentropy",
+    metrics = c("accuracy")
   )
 
   summary(model)
@@ -448,7 +446,10 @@ if (choice %in% c(1, 2)) {
     geom_text(aes(label = n), colour = "white", size = 4, fontface = "bold") +
     scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
     labs(title = "Confusion matrix — test set") +
-    theme(axis.text.x = element_text(angle = 0), legend.position = "none")
+    theme(
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
+      legend.position = "none")
+
   ggsave(file.path(output_folder, "confusion_matrix.png"),
          p_cm, width = 10, height = 8, dpi = 300)
 
@@ -476,7 +477,9 @@ if (choice %in% c(1, 2)) {
     scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
     facet_wrap(~split, scales = "free_y") +
     labs(title = "brnn — learning curve", x = "Epoch", y = "Loss") +
-    theme(legend.position = "none")
+    theme(
+      legend.position = "none",
+      axis.text.x = element_text(angle = 0, hjust = 0.5))
   ggsave(file.path(output_folder, "learning_curve.png"),
          p_lc, width = 12, height = 5, dpi = 300)
 

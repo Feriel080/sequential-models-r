@@ -9,7 +9,8 @@ library(keras3)
 library(text2vec)      
 library(textrecipes)   
 library(yardstick)     
-library(probably)      
+library(probably)  
+library(zoo)    
 
 source("save_results.r")
 
@@ -24,7 +25,6 @@ cat("Choose a number for a specific dataset:\n",
     "3. Text classification\n")
 choice <- as.integer(readline())
 
-cat("this number was chosen: ", choice)
 train_losses <- c()
 val_losses <- c()
 times_per_epoch <- c()
@@ -42,32 +42,29 @@ if (choice %in% c(1, 2)) {
     csv_path <- "time_series/datasets/4features_lags.csv"
   }
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
-
+  
   data <- fread(csv_path) %>%
     as_tibble() %>%
     mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
     arrange(`Date Time`)
 
-  TARGET   <- "p (mbar)"
+  TARGET <- "p (mbar)"
   FEATURES <- setdiff(names(data), c("Date Time", TARGET))
 
-  splits <- time_series_split(
-    data,
-    date_var   = `Date Time`,
-    assess     = "20%",   
-    skip       = 0,
-    cumulative = TRUE
-  )
+  split_point <- floor(nrow(data) * 0.8)
 
-  train_val_df <- training(splits)
-  test_df <- testing(splits)
+  train_val_df <- data[1:split_point, ]
+  test_df <- data[(split_point + 1):nrow(data), ]
 
   # Inner val split (last 12.5 % of train_val)
   val_n <- floor(nrow(train_val_df) * 0.125)
   train_df <- train_val_df[1:(nrow(train_val_df) - val_n), ]
   val_df <- train_val_df[(nrow(train_val_df) - val_n + 1):nrow(train_val_df), ]
 
-  rec <- recipe(as.formula(paste(TARGET, "~ .")), data = train_df) %>%
+  target_pos <- which(names(train_df) == "p (mbar)")
+  rec <- recipe(train_df) %>%
+    update_role(all_of(names(train_df)[target_pos]), new_role = "outcome") %>%
+    update_role(-all_of(names(train_df)[target_pos]), new_role = "predictor") %>%
     step_rm(`Date Time`) %>%
     step_normalize(all_predictors()) %>%
     prep(training = train_df)

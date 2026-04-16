@@ -30,6 +30,9 @@ Install dependencies using R terminal:
 
 ```bash
 renv::restore()
+
+# Run using this line
+source("file_name.r")
 ```
 
 ## Project Structure
