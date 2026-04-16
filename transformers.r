@@ -20,8 +20,8 @@ cat("Choose a number for a specific task:\n",
     "1. Time series forecasting - Univariate.\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
-choice <- as.integer(readline())
-
+# choice <- as.integer(readline())
+choice <- 1
 train_losses <- c()
 val_losses <- c()
 times_per_epoch <- c()
@@ -250,6 +250,25 @@ if (choice %in% c(1, 2)) {
     epoch = rep(seq_len(stop_epoch), 2),
     loss  = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
+  )
+
+  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+    geom_line(linewidth = 0.8) +
+    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+    facet_wrap(~split, scales = "free_y") +
+    labs(title = "Transformer — Learning curve", x = "Epoch", y = "Loss") +
+    theme(
+      legend.position = "none",
+      axis.text.x = element_text(angle = 0, hjust = 0.5),
+      plot.title = element_text(hjust = 0.5)
+    )
+  ggsave(file.path(output_folder, "learning_curve.png"),
+         p_lc, width = 12, height = 5, dpi = 300)
+
+  save_to_file(
+    train_losses, val_losses, execution_time, times_per_epoch,
+    BATCH_SIZE, hyperparams, stop_epoch, metrics,
+    file_path = file.path(output_folder, "full_results.json")
   )
 
 } else {
@@ -504,8 +523,7 @@ if (choice %in% c(1, 2)) {
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
 
-}
-  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+    p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
     geom_line(linewidth = 0.8) +
     scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
     facet_wrap(~split, scales = "free_y") +
@@ -523,3 +541,4 @@ if (choice %in% c(1, 2)) {
     BATCH_SIZE, hyperparams, stop_epoch, metrics,
     file_path = file.path(output_folder, "full_results.json")
   )
+}

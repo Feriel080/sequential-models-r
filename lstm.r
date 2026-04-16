@@ -20,8 +20,8 @@ cat("Choose a number for a specific task:\n",
     "1. Time series forecasting - Univariate.\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
-choice <- as.integer(readline())
-
+# choice <- as.integer(readline())
+choice <- 1
 train_losses <- c()
 val_losses <- c()
 times_per_epoch <- c()
@@ -201,7 +201,7 @@ if (choice %in% c(1, 2)) {
     ) +
     theme(
       legend.position = "bottom",
-      plot.title = element_text(size = 14, face = "bold"),
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.text.x = element_text(angle = 0, hjust = 0.5)
     )
   ggsave(file.path(output_folder, "predicted_vs_real.png"),
@@ -211,6 +211,25 @@ if (choice %in% c(1, 2)) {
     epoch = rep(seq_len(stop_epoch), 2),
     loss = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
+  )
+
+  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+    geom_line(linewidth = 0.8) +
+    scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+    facet_wrap(~split, scales = "free_y") +
+    labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss") +
+    theme(
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+      legend.position = "none",
+      axis.text.x = element_text(angle = 0, hjust = 0.5)
+    )
+  ggsave(file.path(output_folder, "learning_curve.png"),
+    p_lc, width = 12, height = 5, dpi = 300)
+
+  save_to_file(
+    train_losses, val_losses, execution_time,
+    BATCH_SIZE, hyperparams, stop_epoch, metrics,
+    file_path = file.path(output_folder, "full_results.json")
   )
 
 } else {
@@ -422,7 +441,7 @@ if (choice %in% c(1, 2)) {
     scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
     labs(title = "Confusion matrix — test set") +
     theme(
-      plot.title = element_text(size = 14, face = "bold"),
+      plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
       axis.text.x = element_text(angle = 0, hjust = 0.5),
       legend.position = "none")
   ggsave(file.path(output_folder, "confusion_matrix.png"),
@@ -445,23 +464,23 @@ if (choice %in% c(1, 2)) {
     loss  = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
-}
 
-p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+  p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
   geom_line(linewidth = 0.8) +
   scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
   facet_wrap(~split, scales = "free_y") +
-  labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss (MSE)") +
+  labs(title = "LSTM — Learning curve", x = "Epoch", y = "Loss") +
   theme(
-    plot.title = element_text(size = 14, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
     legend.position = "none",
     axis.text.x = element_text(angle = 0, hjust = 0.5)
   )
-ggsave(file.path(output_folder, "learning_curve.png"),
-  p_lc, width = 12, height = 5, dpi = 300)
+  ggsave(file.path(output_folder, "learning_curve.png"),
+    p_lc, width = 12, height = 5, dpi = 300)
 
-save_to_file(
-  train_losses, val_losses, execution_time,
-  BATCH_SIZE, hyperparams, stop_epoch, metrics,
-  file_path = file.path(output_folder, "full_results.json")
-)
+  save_to_file(
+    train_losses, val_losses, execution_time,
+    BATCH_SIZE, hyperparams, stop_epoch, metrics,
+    file_path = file.path(output_folder, "full_results.json")
+  )
+}
