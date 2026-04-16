@@ -16,7 +16,7 @@ theme_set(theme_minimal())
 
 fmt_time <- function(secs) format(.POSIXct(secs, tz = "UTC"), "%H:%M:%S")
 
-cat("Choose a number for a specific dataset:\n",
+cat("Choose a number for a specific task:\n",
     "1. Time series forecasting - Univariate.\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
@@ -437,7 +437,7 @@ if (choice %in% c(1, 2)) {
     scale_fill_gradient(low = "#dce9f5", high = "#1c6ba0") +
     labs(title = "Confusion matrix — test set") +
     theme(
-      axis.text.x = element_text(angle = 0, hjust = 0.5)
+      axis.text.x = element_text(angle = 0, hjust = 0.5),
       legend.position = "none")
   ggsave(file.path(output_folder, "confusion_matrix.png"),
     p_cm, width = 10, height = 8, dpi = 300)

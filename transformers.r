@@ -16,7 +16,7 @@ theme_set(theme_minimal())
 
 fmt_time <- function(secs) format(.POSIXct(secs, tz = "UTC"), "%H:%M:%S")
 
-cat("Choose a number for a specific dataset:\n",
+cat("Choose a number for a specific task:\n",
     "1. Time series forecasting - Univariate.\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
