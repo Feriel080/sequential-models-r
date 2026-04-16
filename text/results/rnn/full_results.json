@@ -1,0 +1,61 @@
+[
+  {
+    "execution_time_seconds": 2242.42,
+    "execution_time_formatted": "00:37:22",
+    "Batch_Size": 128,
+    "model_parameters": {
+      "vocab_size": 25000,
+      "max_sequence_length": 100,
+      "embedding_dim": 100,
+      "batch_size": 128,
+      "hidden_size": 128,
+      "num_layers": 2,
+      "dropout": 0.5,
+      "learning_rate": 0.001,
+      "epochs": 30
+    },
+    "best_training_loss": 0.0581,
+    "best_validation_loss": 0.3465,
+    "best_epoch": 1,
+    "Stopping epoch": 16,
+    "final_training_loss": 0.0581,
+    "final_validation_loss": 0.5848,
+    "test_metrics": {
+      "accuracy": 0.8966,
+      "precision": 0.8979,
+      "recall": 0.8966,
+      "f1": 0.8962,
+      "roc_auc_weighted": 0.9754,
+      "classification_report": {
+        "World": {
+          "precision": 0.8926,
+          "recall": 0.905,
+          "f1_score": 0.8987,
+          "support": 6380
+        },
+        "Sports": {
+          "precision": 0.9543,
+          "recall": 0.9591,
+          "f1_score": 0.9567,
+          "support": 6380
+        },
+        "Business": {
+          "precision": 0.9026,
+          "recall": 0.806,
+          "f1_score": 0.8515,
+          "support": 6380
+        },
+        "Sci/Tech": {
+          "precision": 0.8421,
+          "recall": 0.9163,
+          "f1_score": 0.8776,
+          "support": 6380
+        }
+      }
+    },
+    "loss_history": {
+      "train": [0.6177, 0.3444, 0.2991, 0.2741, 0.2206, 0.1944, 0.1758, 0.1379, 0.1227, 0.1085, 0.0869, 0.0827, 0.0742, 0.066, 0.0624, 0.0581],
+      "validation": [0.3465, 0.369, 0.366, 0.3698, 0.403, 0.4229, 0.4538, 0.4469, 0.4472, 0.4695, 0.5114, 0.5383, 0.5414, 0.5636, 0.5595, 0.5848]
+    }
+  }
+]

@@ -5,7 +5,7 @@ library(jsonlite)
 library(crayon)
 library(ggplot2)
 library(timetk)
-library(keras3)
+library(torch)
 library(text2vec)
 library(yardstick)
 
@@ -102,24 +102,21 @@ if (choice %in% c(1, 2)) {
     learning_rate = LEARNING_RATE
   )
 
-  positional_encoding_layer <- new_layer_class(
+  PositionalEncoding <- nn_module(
     "PositionalEncoding",
-    initialize = function(d_model, max_len = 1000, ...) {
-      super$initialize(...)
-      self$d_model <- d_model
-
-      pe <- matrix(0, nrow = max_len, ncol = d_model)
-      position <- matrix(seq(0, max_len - 1), ncol = 1)
+    initialize = function(d_model, seq_len = 24L) {
+      pe <- matrix(0, nrow = seq_len, ncol = d_model)
+      position <- matrix(1:seq_len, ncol = 1)
       div_term <- exp(seq(0, d_model - 1, by = 2) * (-log(10000) / d_model))
-
+      
       pe[, seq(1, d_model, by = 2)] <- sin(position %*% t(div_term))
       pe[, seq(2, d_model, by = 2)] <- cos(position %*% t(div_term))
-
-      self$pe <- tf$constant(pe, dtype = "float32")
+      
+      # Native R tensor creation, no Python, no reticulate
+      self$pe <- torch_tensor(pe, dtype = torch_float32())
     },
-    call = function(x) {
-      seq_len <- tf$shape(x)[2]
-      x + self$pe[1:seq_len, ]
+    forward = function(x) {
+      x + self$pe
     }
   )
 
@@ -130,10 +127,12 @@ if (choice %in% c(1, 2)) {
     x <- inputs %>% layer_dense(units = D_MODEL)
 
     # Add positional encoding
-    x <- x %>% positional_encoding_layer(d_model = D_MODEL)
+    x <- x %>% PositionalEncoding(d_model = D_MODEL, seq_len = SEQ_LENGTH)
 
     # Stack transformer encoder layers
     for (l in seq_len(NUM_LAYERS)) {
+      x_input <- x 
+
       x <- x %>%
         layer_multi_head_attention(
           num_heads = NHEAD,
@@ -141,7 +140,7 @@ if (choice %in% c(1, 2)) {
           dropout = DROPOUT
         )(x, x) %>%
         layer_dropout(DROPOUT) %>%
-        { layer_add(list(., x)) } %>%         # residual connection
+        { layer_add(list(., x_input)) } %>%         # residual connection
         layer_layer_normalization() %>%
         { . ->> skip } %>%                    # save for second residual
         layer_dense(units = DIM_FEEDFORWARD, activation = "relu") %>%
@@ -151,7 +150,7 @@ if (choice %in% c(1, 2)) {
         layer_layer_normalization()
     }
 
-    # Take last time step (mirrors out[:, -1, :] in Python)
+    # Take last time step
     outputs <- x %>%
       layer_lambda(function(t) t[, -1, ]) %>%
       layer_dense(units = 1)
@@ -215,10 +214,10 @@ if (choice %in% c(1, 2)) {
   y_true <- te$y
 
   results_df <- tibble(truth = y_true, estimate = y_pred)
-  r2   <- rsq(results_df,  truth, estimate)$.estimate
-  mae  <- mae(results_df,  truth, estimate)$.estimate
+  r2 <- rsq(results_df,  truth, estimate)$.estimate
+  mae <- mae(results_df,  truth, estimate)$.estimate
   rmse <- rmse(results_df, truth, estimate)$.estimate
-  mse  <- rmse ^ 2
+  mse <- rmse ^ 2
 
   metrics <- list(`R2 score` = r2, MAE = mae, mse = mse, rmse = rmse)
   cat(sprintf("\nR²: %.4f | MAE: %.4f | MSE: %.4f | RMSE: %.4f\n",
@@ -226,8 +225,8 @@ if (choice %in% c(1, 2)) {
 
   n_show  <- min(200, length(y_true))
   pred_df <- tibble(
-    step      = 1:n_show,
-    Actual    = y_true[1:n_show],
+    step = 1:n_show,
+    Actual = y_true[1:n_show],
     Predicted = y_pred[1:n_show]
   ) %>% pivot_longer(-step, names_to = "Series", values_to = "Value")
 
@@ -266,25 +265,25 @@ if (choice %in% c(1, 2)) {
   NUM_CLASSES <- length(class_mapping)
 
   set.seed(42)
-  split1       <- initial_split(data, prop = 0.8, strata = `Class Index`)
+  split1 <- initial_split(data, prop = 0.8, strata = `Class Index`)
   train_val_df <- training(split1)
-  test_df      <- testing(split1)
+  test_df <- testing(split1)
 
-  split2   <- initial_split(train_val_df, prop = 0.9, strata = `Class Index`)
+  split2 <- initial_split(train_val_df, prop = 0.9, strata = `Class Index`)
   train_df <- training(split2)
-  val_df   <- testing(split2)
+  val_df <- testing(split2)
 
-  MAX_VOCAB_SIZE  <- 25000L
-  MAX_SEQ_LENGTH  <- 100L
-  EMBEDDING_DIM   <- 128L
-  BATCH_SIZE      <- 128L
-  NUM_LAYERS      <- 2L
-  D_MODEL         <- 128L
-  NHEAD           <- 4L
+  MAX_VOCAB_SIZE <- 25000L
+  MAX_SEQ_LENGTH <- 100L
+  EMBEDDING_DIM <- 128L
+  BATCH_SIZE <- 128L
+  NUM_LAYERS <- 2L
+  D_MODEL <- 128L
+  NHEAD <- 4L
   DIM_FEEDFORWARD <- 256L
-  DROPOUT         <- 0.3
-  LEARNING_RATE   <- 0.0001
-  EPOCHS          <- 30L
+  DROPOUT <- 0.3
+  LEARNING_RATE <- 0.0001
+  EPOCHS <- 30L
 
   it_train <- itoken(train_df$text, tokenizer = word_tokenizer, progressbar = FALSE)
 
@@ -304,25 +303,25 @@ if (choice %in% c(1, 2)) {
   texts_to_matrix <- function(texts, term_idx, max_len) {
     tokens <- word_tokenizer(texts)
     t(sapply(tokens, function(toks) {
-      toks            <- toks[seq_len(min(length(toks), max_len))]
-      idx             <- term_idx[toks]
+      toks <- toks[seq_len(min(length(toks), max_len))]
+      idx <- term_idx[toks]
       idx[is.na(idx)] <- 1L
-      length(idx)     <- max_len
+      length(idx) <- max_len
       idx[is.na(idx)] <- 0L
       as.integer(idx)
     }))
   }
 
   X_train_mat <- texts_to_matrix(train_df$text, term_to_idx, MAX_SEQ_LENGTH)
-  X_val_mat   <- texts_to_matrix(val_df$text,   term_to_idx, MAX_SEQ_LENGTH)
-  X_test_mat  <- texts_to_matrix(test_df$text,  term_to_idx, MAX_SEQ_LENGTH)
+  X_val_mat <- texts_to_matrix(val_df$text,   term_to_idx, MAX_SEQ_LENGTH)
+  X_test_mat <- texts_to_matrix(test_df$text,  term_to_idx, MAX_SEQ_LENGTH)
 
-  classes    <- sort(unique(data$`Class Index`))
+  classes <- sort(unique(data$`Class Index`))
   encode_lbl <- function(v) match(v, classes) - 1L
 
   y_train <- encode_lbl(train_df$`Class Index`)
-  y_val   <- encode_lbl(val_df$`Class Index`)
-  y_test  <- encode_lbl(test_df$`Class Index`)
+  y_val <- encode_lbl(val_df$`Class Index`)
+  y_test <- encode_lbl(test_df$`Class Index`)
 
   # Transformer for text: embedding + positional encoding + encoder layers + masked mean pooling
   # Mean pooling over non-padding tokens replaces the manual summed/counts approach in Python
@@ -332,10 +331,10 @@ if (choice %in% c(1, 2)) {
     # Embedding scaled by sqrt(d_model) as in the original Transformer paper
     x <- inputs %>%
       layer_embedding(
-        input_dim  = vocab_size,
+        input_dim = vocab_size,
         output_dim = EMBEDDING_DIM,
-        mask_zero  = TRUE,
-        name       = "embedding"
+        mask_zero = TRUE,
+        name = "embedding"
       ) %>%
       { . * sqrt(as.numeric(D_MODEL)) } %>%
       positional_encoding_layer(d_model = D_MODEL)
@@ -371,30 +370,30 @@ if (choice %in% c(1, 2)) {
 
   model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss      = "sparse_categorical_crossentropy",
-    metrics   = c("accuracy")
+    loss = "sparse_categorical_crossentropy",
+    metrics = c("accuracy")
   )
 
   summary(model)
 
   callbacks_list <- list(
     callback_early_stopping(
-      monitor              = "val_loss",
-      patience             = 15,
+      monitor = "val_loss",
+      patience = 15,
       restore_best_weights = TRUE,
-      verbose              = 1
+      verbose = 1
     ),
     callback_reduce_lr_on_plateau(
-      monitor  = "val_loss",
-      factor   = 0.5,
+      monitor = "val_loss",
+      factor = 0.5,
       patience = 3,
-      verbose  = 1
+      verbose = 1
     ),
     callback_model_checkpoint(
-      filepath       = file.path(output_folder, "best_model.keras"),
-      monitor        = "val_accuracy",
+      filepath = file.path(output_folder, "best_model.keras"),
+      monitor = "val_accuracy",
       save_best_only = TRUE,
-      verbose        = 1
+      verbose = 1
     )
   )
 
@@ -402,13 +401,13 @@ if (choice %in% c(1, 2)) {
   start_time <- proc.time()["elapsed"]
 
   history <- model %>% fit(
-    x               = X_train_mat,
-    y               = y_train,
-    epochs          = EPOCHS,
-    batch_size      = BATCH_SIZE,
+    x = X_train_mat,
+    y = y_train,
+    epochs = EPOCHS,
+    batch_size = BATCH_SIZE,
     validation_data = list(X_val_mat, y_val),
-    callbacks       = callbacks_list,
-    verbose         = 1
+    callbacks = callbacks_list,
+    verbose = 1
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
@@ -425,19 +424,19 @@ if (choice %in% c(1, 2)) {
     pretty = TRUE, auto_unbox = TRUE
   )
 
-  probs_mat  <- predict(model, X_test_mat)
-  preds      <- max.col(probs_mat) - 1L
+  probs_mat <- predict(model, X_test_mat)
+  preds <- max.col(probs_mat) - 1L
   labels_fct <- factor(unname(class_mapping)[y_test + 1L], levels = unname(class_mapping))
-  preds_fct  <- factor(unname(class_mapping)[preds  + 1L], levels = unname(class_mapping))
+  preds_fct <- factor(unname(class_mapping)[preds  + 1L], levels = unname(class_mapping))
 
   eval_df <- tibble(truth = labels_fct, estimate = preds_fct) %>%
     bind_cols(as_tibble(probs_mat, .name_repair = ~ unname(class_mapping)))
 
-  accuracy  <- accuracy(eval_df,  truth, estimate)$.estimate
+  accuracy <- accuracy(eval_df,  truth, estimate)$.estimate
   precision <- precision(eval_df, truth, estimate, estimator = "macro")$.estimate
-  recall    <- recall(eval_df,    truth, estimate, estimator = "macro")$.estimate
-  f1        <- f_meas(eval_df,    truth, estimate, estimator = "macro")$.estimate
-  roc_auc   <- roc_auc(eval_df,   truth, all_of(unname(class_mapping)),
+  recall <- recall(eval_df,    truth, estimate, estimator = "macro")$.estimate
+  f1 <- f_meas(eval_df,    truth, estimate, estimator = "macro")$.estimate
+  roc_auc <- roc_auc(eval_df,   truth, all_of(unname(class_mapping)),
                         estimator = "macro_weighted")$.estimate
 
   report <- lapply(unname(class_mapping), function(cls) {
@@ -448,15 +447,15 @@ if (choice %in% c(1, 2)) {
     re   <- if ((tp + fn) > 0) tp / (tp + fn) else 0
     f1_c <- if ((pr + re) > 0) 2 * pr * re / (pr + re) else 0
     list(precision = pr, recall = re, f1_score = f1_c,
-         support = sum(labels_fct == cls))
+        support = sum(labels_fct == cls))
   }) %>% setNames(unname(class_mapping))
 
   metrics <- list(
-    accuracy              = accuracy,
-    precision             = precision,
-    recall                = recall,
-    f1                    = f1,
-    roc_auc_weighted      = roc_auc,
+    accuracy = accuracy,
+    precision = precision,
+    recall = recall,
+    f1 = f1,
+    roc_auc_weighted = roc_auc,
     classification_report = report
   )
 

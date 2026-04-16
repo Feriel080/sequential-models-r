@@ -24,7 +24,7 @@ cat("Choose a number for a specific task:\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
 # choice <- as.integer(readline())
-choice <- 1
+choice <- 3
 train_losses <- c()
 val_losses <- c()
 
@@ -404,7 +404,16 @@ if (choice %in% c(1, 2)) {
                      estimator = "macro_weighted")$.estimate
 
   # Per-class report
-  report <- per_class_prec_recall_f1(eval_df$truth, eval_df$estimate, class_mapping)
+  report <- lapply(unname(class_mapping), function(cls) {
+    tp   <- sum(preds_fct == cls & labels_fct == cls)
+    fp   <- sum(preds_fct == cls & labels_fct != cls)
+    fn   <- sum(preds_fct != cls & labels_fct == cls)
+    pr   <- if ((tp + fp) > 0) tp / (tp + fp) else 0
+    re   <- if ((tp + fn) > 0) tp / (tp + fn) else 0
+    f1_c <- if ((pr + re) > 0) 2 * pr * re / (pr + re) else 0
+    list(precision = pr, recall = re, f1_score = f1_c,
+        support = sum(labels_fct == cls))
+  }) %>% setNames(unname(class_mapping))
 
   metrics <- list(
     accuracy = accuracy,

@@ -1,0 +1,30 @@
+[
+  {
+    "execution_time_seconds": 1061.56,
+    "execution_time_formatted": "00:17:41",
+    "Batch_Size": 64,
+    "model_parameters": {
+      "epochs": 50,
+      "hidden_size": 64,
+      "num_layers": 2,
+      "dropout": 0.2,
+      "learning_rate": 0.001
+    },
+    "best_training_loss": 0.6178,
+    "best_validation_loss": 1.4221,
+    "best_epoch": 9,
+    "Stopping epoch": 14,
+    "final_training_loss": 0.6178,
+    "final_validation_loss": 2.5897,
+    "test_metrics": {
+      "R2 score": 0.0693,
+      "MAE": 1.1511,
+      "mse": 769.0506,
+      "rmse": 27.7318
+    },
+    "loss_history": {
+      "train": [701542.6875, 320090.25, 96937.2031, 11731.9775, 187.8721, 55.3438, 3.2231, 1.4859, 86.1155, 11.3538, 1.2142, 0.9139, 6.0327, 0.6178],
+      "validation": [477347.25, 177318.8594, 30505.0898, 210.2381, 8.3163, 1.721, 2.4346, 3.0905, 1.4221, 2.8487, 3.966, 2.5492, 4.357, 2.5897]
+    }
+  }
+]

@@ -21,7 +21,7 @@ cat("Choose a number for a specific task:\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
 # choice <- as.integer(readline())
-choice <- 1
+choice <- 2
 train_losses <- c()
 val_losses <- c()
 
@@ -380,17 +380,17 @@ if (choice %in% c(1, 2)) {
   precision <- precision(eval_df, truth, estimate, estimator = "macro")$.estimate
   recall <- recall(eval_df, truth, estimate, estimator = "macro")$.estimate
   f1 <- f_meas(eval_df, truth, estimate, estimator = "macro")$.estimate
-  roc_auc <- roc_auc(eval_df,   truth, all_of(unname(class_mapping)), estimator = "macro_weighted")$.estimate
+  roc_auc <- roc_auc(eval_df, truth, all_of(unname(class_mapping)), estimator = "macro_weighted")$.estimate
 
   report <- lapply(unname(class_mapping), function(cls) {
-    tp <- sum(preds_fct == cls & labels_fct == cls)
-    fp <- sum(preds_fct == cls & labels_fct != cls)
-    fn <- sum(preds_fct != cls & labels_fct == cls)
-    pr <- if ((tp + fp) > 0) tp / (tp + fp) else 0
-    re <- if ((tp + fn) > 0) tp / (tp + fn) else 0
+    tp   <- sum(preds_fct == cls & labels_fct == cls)
+    fp   <- sum(preds_fct == cls & labels_fct != cls)
+    fn   <- sum(preds_fct != cls & labels_fct == cls)
+    pr   <- if ((tp + fp) > 0) tp / (tp + fp) else 0
+    re   <- if ((tp + fn) > 0) tp / (tp + fn) else 0
     f1_c <- if ((pr + re) > 0) 2 * pr * re / (pr + re) else 0
     list(precision = pr, recall = re, f1_score = f1_c,
-    support = sum(labels_fct == cls))
+        support = sum(labels_fct == cls))
   }) %>% setNames(unname(class_mapping))
 
   metrics <- list(
