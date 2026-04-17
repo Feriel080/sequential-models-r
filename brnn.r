@@ -247,7 +247,7 @@ if (choice %in% c(1, 2)) {
   LEARNING_RATE <- 0.001
   EPOCHS <- 30L
 
-  # ── text2vec: vocabulary from training set only ────────────────────────────
+  # vocabulary from training set only 
   it_train <- itoken(train_df$text, tokenizer = word_tokenizer, progressbar = FALSE)
 
   vocab <- create_vocabulary(it_train) %>%
@@ -264,7 +264,7 @@ if (choice %in% c(1, 2)) {
     vocab$term
   )
 
-  # ── text2vec tokenize + pad/truncate ──────────────────────────────────────
+  # tokenize + pad/truncate 
   texts_to_matrix <- function(texts, term_idx, max_len) {
     tokens <- word_tokenizer(texts)
     t(sapply(tokens, function(toks) {
@@ -281,7 +281,7 @@ if (choice %in% c(1, 2)) {
   X_val_mat <- texts_to_matrix(val_df$text, term_to_idx, MAX_SEQ_LENGTH)
   X_test_mat <- texts_to_matrix(test_df$text, term_to_idx, MAX_SEQ_LENGTH)
 
-  # ── Label encoding (0-based for Keras sparse_categorical_crossentropy) ─────
+  # Label encoding
   classes <- sort(unique(data$`Class Index`))
   encode_lbl <- function(v) match(v, classes) - 1L
 
@@ -322,7 +322,7 @@ if (choice %in% c(1, 2)) {
     layer_dropout(DROPOUT) %>%
     layer_dense(units = NUM_CLASSES, activation = "softmax")
 
-  model %>% compile(
+  model <- model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
     loss = "sparse_categorical_crossentropy",
     metrics = c("accuracy")
@@ -330,7 +330,6 @@ if (choice %in% c(1, 2)) {
 
   summary(model)
 
-  # ── Callbacks ──────────────────────────────────────────────────────────────
   callbacks_list <- list(
     callback_early_stopping(
       monitor = "val_loss",
