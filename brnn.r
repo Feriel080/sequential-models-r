@@ -307,7 +307,7 @@ if (choice %in% c(1, 2)) {
     )
 
   if (NUM_LAYERS > 1) {
-    for (l in seq_len(NUM_LAYERS - 2)) {
+    for (l in seq_len(NUM_LAYERS - 1)) {
       model <- model %>%
       bidirectional(
         layer_simple_rnn(
@@ -320,7 +320,7 @@ if (choice %in% c(1, 2)) {
 
   model <- model %>%
     layer_dropout(DROPOUT) %>%
-    layer_dense(units = NUM_CLASSES, activation = "softmax")
+    layer_dense(units = NUM_CLASSES, activation = "softmax", name= "output")
 
   model <- model %>% compile(
     optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
