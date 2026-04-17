@@ -61,19 +61,17 @@ if (choice %in% c(1, 2)) {
   val_df <- train_val_df[(nrow(train_val_df) - val_n + 1):nrow(train_val_df), ]
 
   # scaling data
-  # target_pos <- which(names(train_df) == "p (mbar)")
-  # rec <- recipe(train_df) %>%
-  #   update_role(all_of(names(train_df)[target_pos]), new_role = "outcome") %>%
-  #   update_role(-all_of(names(train_df)[target_pos]), new_role = "predictor") %>%
-  #   step_rm(`Date Time`) %>%
-  #   step_normalize(all_predictors()) %>%
-  #   prep(training = train_df)
+  target_pos <- which(names(train_df) == "p (mbar)")
+  rec <- recipe(train_df) %>%
+    update_role(all_of(names(train_df)[target_pos]), new_role = "outcome") %>%
+    update_role(-all_of(names(train_df)[target_pos]), new_role = "predictor") %>%
+    step_rm(`Date Time`) %>%
+    step_normalize(all_predictors()) %>%
+    prep(training = train_df)
 
-  # saveRDS(rec, file = paste0("time_series/results/scaler_", choice, ".rds"))
-  # cat(green(sprintf("Scaler saved to time_series/results/scaler_%d.rds\n", choice)))
+  saveRDS(rec, file = paste0("time_series/results/scaler_", choice, ".rds"))
+  cat(green(sprintf("Scaler saved to time_series/results/scaler_%d.rds\n", choice)))
   
-  rec <- readRDS(paste0("time_series/results/scaler_", choice, ".rds"))
-
   X_train <- bake(rec, train_df) %>% select(all_of(FEATURES)) %>% as.matrix()
   X_val <- bake(rec, val_df)   %>% select(all_of(FEATURES)) %>% as.matrix()
   X_test <- bake(rec, test_df)  %>% select(all_of(FEATURES)) %>% as.matrix()
@@ -83,7 +81,7 @@ if (choice %in% c(1, 2)) {
 
   create_sequences <- function(X, y, seq_len = 24) {
     n <- nrow(X)
-    idx <- 1:(n - seq_len)
+    idx <- seq_len(n - seq_len)
     Xs <- array(0, dim = c(length(idx), seq_len, ncol(X)))
     ys <- numeric(length(idx))
     for (i in idx) {

@@ -69,7 +69,7 @@ if (choice %in% c(1, 2)) {
 
   create_sequences <- function(X, y, seq_len = 24) {
     n <- nrow(X)
-    idx <- 1:(n - seq_len)
+    idx <- seq_len(n - seq_len)
     Xs <- array(0, dim = c(length(idx), seq_len, ncol(X)))
     ys <- numeric(length(idx))
     for (i in idx) {
@@ -259,7 +259,6 @@ if (choice %in% c(1, 2)) {
   vectorizer <- vocab_vectorizer(vocab)
   vocab_size <- nrow(vocab) + 2L              # +2 for PAD/UNK
 
-  
   term_to_idx <- setNames(
     seq_len(nrow(vocab)) + 1L,  
     vocab$term
@@ -297,22 +296,26 @@ if (choice %in% c(1, 2)) {
       mask_zero = TRUE,           # honours PAD=0, replaces pack_padded_sequence
       name = "embedding"
     ) %>%
-    layer_simple_brnn(
-      units = HIDDEN_SIZE,
-      return_sequences = (NUM_LAYERS > 1),
-      dropout = DROPOUT,
-      activation = "tanh",
+    bidirectional(
+      layer_simple_rnn(
+        units = HIDDEN_SIZE,
+        return_sequences = (NUM_LAYERS > 1),
+        dropout = DROPOUT,
+        activation = "tanh",
+      ),
       name = "brnn_1"
     )
 
   if (NUM_LAYERS > 1) {
     for (l in seq_len(NUM_LAYERS - 2)) {
       model <- model %>%
-        layer_simple_brnn(units = HIDDEN_SIZE, return_sequences = TRUE,
-                         dropout = DROPOUT, activation = "tanh")
+      bidirectional(
+        layer_simple_rnn(
+          units = HIDDEN_SIZE,
+          return_sequences = (l < NUM_LAYERS - 1),
+          dropout = DROPOUT,
+          activation = "tanh"))
     }
-    model <- model %>%
-      layer_simple_brnn(units = HIDDEN_SIZE, dropout = DROPOUT, activation = "tanh")
   }
 
   model <- model %>%

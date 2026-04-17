@@ -180,33 +180,36 @@ if (choice %in% c(1, 2)) {
   cat(blue("Training started...\n"))
   start_time <- proc.time()["elapsed"]
 
-  fitted_model <- model %>% fit(
-    train_dl,
+  fitted_model <- luz::fit(
+    object = model,
+    data = train_dl,
     epochs = EPOCHS,
     valid_data = val_dl,
     callbacks = list(
       luz_callback_early_stopping(monitor = "valid_loss", patience = 7),
       luz_callback_lr_scheduler(
         torch::lr_reduce_on_plateau,
-        monitor = "valid_loss",
+        # monitor = "valid_loss",
         factor = 0.5,
         patience = 5
       ),
       luz_callback_model_checkpoint(
         path = file.path(output_folder, "transformer_best.pt"),
-        monitor = "valid_loss"
+        monitor = "valid_loss",
+        save_best_only = TRUE
       )
     ),
     verbose = TRUE
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
-  train_losses <- fitted_model$records$metrics$train
-  val_losses <- fitted_model$records$metrics$valid
+  train_losses <- fitted_model$records$metrics$train$loss
+  val_losses <- fitted_model$records$metrics$valid$loss
   stop_epoch <- length(train_losses)
 
   write_json(
-    list(`Train losses` = train_losses, `Val Losses` = val_losses),
+    list(`Train losses` = train_losses, `Val Losses` = val_losses,
+    `Execution Time` = execution_time, `Stop Epoch` = stop_epoch),
     file.path(output_folder, "train_val_losses.json"),
     pretty = TRUE, auto_unbox = TRUE
   )

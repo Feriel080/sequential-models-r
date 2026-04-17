@@ -91,11 +91,11 @@ if (choice %in% c(1, 2)) {
   input_size  <- dim(tr$X)[3]
 
   hyperparams <- list(
-  epochs    = EPOCHS,
-  hidden_size = HIDDEN_SIZE,
-  num_layers  = NUM_LAYERS,
-  dropout   = DROPOUT,
-  learning_rate = LEARNING_RATE
+    epochs    = EPOCHS,
+    hidden_size = HIDDEN_SIZE,
+    num_layers  = NUM_LAYERS,
+    dropout   = DROPOUT,
+    learning_rate = LEARNING_RATE
   )
 
   build_gru_ts <- function() {
@@ -244,10 +244,10 @@ if (choice %in% c(1, 2)) {
   it_train <- itoken(train_df$text, tokenizer = word_tokenizer, progressbar = FALSE)
 
   vocab <- create_vocabulary(it_train) %>%
-  prune_vocabulary(
-  term_count_min = 1L,
-  vocab_term_max = MAX_VOCAB_SIZE - 2L
-  )
+    prune_vocabulary(
+      term_count_min = 1L,
+      vocab_term_max = MAX_VOCAB_SIZE - 2L
+    )
 
   vocab_size  <- nrow(vocab) + 2L
 
