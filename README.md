@@ -97,6 +97,10 @@ All models shared the following configurations for fair comparison:
 * Number of heads: 4
 * Dimension of feed forward: 256
 
+## Clarification of Text Classification results
+
+If you go see one of the metrics of the classification results in _text/results/<model_name>/full_results.json_ you'll find a high score. That was due to using the best model obtained from the training which we saved for predicting classes.
+
 ## Key Findings
 
 NOT YET
