@@ -21,7 +21,7 @@ cat("Choose a number for a specific task:\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
 # choice <- as.integer(readline())
-choice <- 2
+choice <- 3
 train_losses <- c()
 val_losses <- c()
 
@@ -66,7 +66,7 @@ if (choice %in% c(1, 2)) {
 
   create_sequences <- function(X, y, seq_len = 24) {
     n <- nrow(X)
-    idx <- seq_len(n - seq_len)
+    idx <- 1:(n - seq_len)
     Xs <- array(0, dim = c(length(idx), seq_len, ncol(X)))
     ys <- numeric(length(idx))
     for (i in idx) {

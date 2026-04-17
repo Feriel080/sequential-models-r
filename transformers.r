@@ -6,6 +6,7 @@ library(crayon)
 library(ggplot2)
 library(timetk)
 library(torch)
+library(luz)
 library(text2vec)
 library(yardstick)
 
@@ -82,6 +83,7 @@ if (choice %in% c(1, 2)) {
   vl <- create_sequences(X_val, y_val, SEQ_LENGTH)
   te <- create_sequences(X_test, y_test, SEQ_LENGTH)
 
+  # hyperparameters 
   BATCH_SIZE <- 64L
   EPOCHS <- 50L
   D_MODEL <- 64L
@@ -112,96 +114,95 @@ if (choice %in% c(1, 2)) {
       pe[, seq(1, d_model, by = 2)] <- sin(position %*% t(div_term))
       pe[, seq(2, d_model, by = 2)] <- cos(position %*% t(div_term))
       
-      # Native R tensor creation, no Python, no reticulate
-      self$pe <- torch_tensor(pe, dtype = torch_float32())
+      self$register_buffer("pe", torch_tensor(pe, dtype = torch_float32()))
     },
     forward = function(x) {
-      x + self$pe
+      x + self$pe$unsqueeze(1)
     }
   )
 
-  build_transformer_ts <- function() {
-    inputs <- layer_input(shape = c(SEQ_LENGTH, input_size))
+  TransformerTS <- nn_module(
+    initialize = function(input_size, d_model, nhead, num_layers, dim_feedforward, dropout) {
+      self$input_proj <- nn_linear(input_size, d_model)
+      self$pos_enc <- PositionalEncoding(d_model, SEQ_LENGTH)
+      encoder_layer <- nn_transformer_encoder_layer(
+        d_model = d_model,
+        nhead = nhead,
+        dim_feedforward = dim_feedforward,
+        dropout = dropout,
+        batch_first = TRUE
+      )
+      self$transformer_encoder <- nn_transformer_encoder(encoder_layer, num_layers = num_layers)
+      self$output <- nn_linear(d_model, 1)
+    },
 
-    # Project input features into d_model space
-    x <- inputs %>% layer_dense(units = D_MODEL)
-
-    # Add positional encoding
-    x <- x %>% PositionalEncoding(d_model = D_MODEL, seq_len = SEQ_LENGTH)
-
-    # Stack transformer encoder layers
-    for (l in seq_len(NUM_LAYERS)) {
-      x_input <- x 
-
-      x <- x %>%
-        layer_multi_head_attention(
-          num_heads = NHEAD,
-          key_dim = D_MODEL %/% NHEAD,
-          dropout = DROPOUT
-        )(x, x) %>%
-        layer_dropout(DROPOUT) %>%
-        { layer_add(list(., x_input)) } %>%         # residual connection
-        layer_layer_normalization() %>%
-        { . ->> skip } %>%                    # save for second residual
-        layer_dense(units = DIM_FEEDFORWARD, activation = "relu") %>%
-        layer_dense(units = D_MODEL) %>%
-        layer_dropout(DROPOUT) %>%
-        { layer_add(list(., skip)) } %>%      # residual connection
-        layer_layer_normalization()
+    forward = function(x) {
+      x <- self$input_proj(x)              # (batch, seq_len, d_model)ç
+      x <- self$pos_enc(x)
+      x <- self$transformer_encoder(x)     # (batch, seq_len, d_model)
+      x <- x[ , dim(x)[2], ]              # last timestep (batch, d_model)
+      self$output(x)                       # (batch, 1)
     }
+  )
 
-    # Take last time step
-    outputs <- x %>%
-      layer_lambda(function(t) t[, -1, ]) %>%
-      layer_dense(units = 1)
+  model <- TransformerTS %>%
+    setup(
+      loss = nn_mse_loss(),
+      optimizer = optim_adam,
+      metrics = list(luz_metric_mae())
+    ) %>%
+    set_hparams(
+      input_size = input_size,
+      d_model = D_MODEL,
+      nhead = NHEAD,
+      num_layers = NUM_LAYERS,
+      dim_feedforward = DIM_FEEDFORWARD,
+      dropout = DROPOUT
+    ) %>%
+    set_opt_hparams(lr = LEARNING_RATE)
 
-    keras_model(inputs, outputs, name = "Transformer_ts")
+  # convert to tensors
+  to_dataset <- function(X, y) {
+    tensor_dataset(
+      torch_tensor(X, dtype = torch_float32()),
+      torch_tensor(y, dtype = torch_float32())$unsqueeze(2)
+    )
   }
 
-  model <- build_transformer_ts()
+  train_ds <- to_dataset(tr$X, tr$y)
+  val_ds <- to_dataset(vl$X, vl$y)
+  test_ds <- to_dataset(te$X, te$y)
 
-  model %>% compile(
-    optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss = "mse"
-  )
-
-  callbacks_list <- list(
-    callback_early_stopping(
-      monitor = "val_loss",
-      patience = 7,
-      restore_best_weights = TRUE,
-      verbose = 1
-    ),
-    callback_reduce_lr_on_plateau(
-      monitor = "val_loss",
-      factor = 0.5,
-      patience = 3,
-      verbose = 1
-    ),
-    callback_model_checkpoint(
-      filepath = file.path(output_folder, "transformer_best.keras"),
-      monitor = "val_loss",
-      save_best_only = TRUE,
-      verbose = 1
-    )
-  )
+  train_dl <- dataloader(train_ds, batch_size = BATCH_SIZE, shuffle = FALSE)
+  val_dl <- dataloader(val_ds, batch_size = BATCH_SIZE)
+  test_dl <- dataloader(test_ds, batch_size = BATCH_SIZE)
 
   cat(blue("Training started...\n"))
   start_time <- proc.time()["elapsed"]
 
-  history <- model %>% fit(
-    x = tr$X,
-    y = tr$y,
+  fitted_model <- model %>% fit(
+    train_dl,
     epochs = EPOCHS,
-    batch_size = BATCH_SIZE,
-    validation_data = list(vl$X, vl$y),
-    callbacks = callbacks_list,
-    verbose = 1
+    valid_data = val_dl,
+    callbacks = list(
+      luz_callback_early_stopping(monitor = "valid_loss", patience = 7),
+      luz_callback_lr_scheduler(
+        torch::lr_reduce_on_plateau,
+        monitor = "valid_loss",
+        factor = 0.5,
+        patience = 5
+      ),
+      luz_callback_model_checkpoint(
+        path = file.path(output_folder, "transformer_best.pt"),
+        monitor = "valid_loss"
+      )
+    ),
+    verbose = TRUE
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
-  train_losses <- history$metrics$loss
-  val_losses <- history$metrics$val_loss
+  train_losses <- fitted_model$records$metrics$train
+  val_losses <- fitted_model$records$metrics$valid
   stop_epoch <- length(train_losses)
 
   write_json(
@@ -210,7 +211,8 @@ if (choice %in% c(1, 2)) {
     pretty = TRUE, auto_unbox = TRUE
   )
 
-  y_pred <- as.vector(predict(model, te$X))
+  y_pred <- predict(fitted_model, test_dl)
+  y_pred <- as.numeric(y_pred)
   y_true <- te$y
 
   results_df <- tibble(truth = y_true, estimate = y_pred)
@@ -285,6 +287,7 @@ if (choice %in% c(1, 2)) {
   LEARNING_RATE <- 0.0001
   EPOCHS <- 30L
 
+  # Vocabulary
   it_train <- itoken(train_df$text, tokenizer = word_tokenizer, progressbar = FALSE)
 
   vocab <- create_vocabulary(it_train) %>%
@@ -323,96 +326,121 @@ if (choice %in% c(1, 2)) {
   y_val <- encode_lbl(val_df$`Class Index`)
   y_test <- encode_lbl(test_df$`Class Index`)
 
-  # Transformer for text: embedding + positional encoding + encoder layers + masked mean pooling
-  # Mean pooling over non-padding tokens replaces the manual summed/counts approach in Python
-  build_transformer_text <- function() {
-    inputs <- layer_input(shape = c(MAX_SEQ_LENGTH), dtype = "int32")
+  text_dataset <- dataset(
+    initialize = function(X_mat, y_vec) {
+      self$X <- torch_tensor(X_mat, dtype = torch_long())
+      self$y <- torch_tensor(y_vec, dtype = torch_long())
+    },
+    .getitem = function(i) list(x = self$X[i, ], y = self$y[i]),
+    .length  = function()  nrow(self$X)
+  )
 
-    # Embedding scaled by sqrt(d_model) as in the original Transformer paper
-    x <- inputs %>%
-      layer_embedding(
-        input_dim = vocab_size,
-        output_dim = EMBEDDING_DIM,
-        mask_zero = TRUE,
-        name = "embedding"
-      ) %>%
-      { . * sqrt(as.numeric(D_MODEL)) } %>%
-      positional_encoding_layer(d_model = D_MODEL)
+  train_ds <- text_dataset(X_train_mat, y_train)
+  val_ds <- text_dataset(X_val_mat, y_val)
+  test_ds <- text_dataset(X_test_mat, y_test)
 
-    for (l in seq_len(NUM_LAYERS)) {
-      x <- x %>%
-        layer_multi_head_attention(
-          num_heads = NHEAD,
-          key_dim   = D_MODEL %/% NHEAD,
-          dropout   = DROPOUT
-        )(x, x) %>%
-        layer_dropout(DROPOUT) %>%
-        { layer_add(list(., x)) } %>%
-        layer_layer_normalization() %>%
-        { . ->> skip } %>%
-        layer_dense(units = DIM_FEEDFORWARD, activation = "relu") %>%
-        layer_dense(units = D_MODEL) %>%
-        layer_dropout(DROPOUT) %>%
-        { layer_add(list(., skip)) } %>%
-        layer_layer_normalization()
+  # data loader
+  train_dl <- dataloader(train_ds, batch_size = BATCH_SIZE, shuffle = TRUE)
+  val_dl <- dataloader(val_ds, batch_size = BATCH_SIZE)
+  test_dl <- dataloader(test_ds, batch_size = BATCH_SIZE)
+
+  PositionalEncoding <- nn_module(
+    "PositionalEncoding",
+    initialize = function(d_model, seq_len) {
+      pe <- matrix(0, nrow = seq_len, ncol = d_model)
+      position <- matrix(1:seq_len, ncol = 1)
+      div_term <- exp(seq(0, d_model - 2, by = 2) * (-log(10000) / d_model))
+
+      pe[, seq(1, d_model, by = 2)] <- sin(position %*% t(div_term))
+      pe[, seq(2, d_model, by = 2)] <- cos(position %*% t(div_term))
+
+      self$register_buffer("pe", torch_tensor(pe)$unsqueeze(1))  # (seq_len, 1, d_model)
+    },
+    forward = function(x) {
+      x + self$pe$permute(c(2, 1, 3))  # (1, seq_len, d_model) 
     }
-
-    # Global average pooling over sequence dimension (respects mask from embedding)
-    outputs <- x %>%
-      layer_global_average_pooling_1d() %>%
-      layer_dropout(DROPOUT) %>%
-      layer_dense(units = NUM_CLASSES, activation = "softmax")
-
-    keras_model(inputs, outputs, name = "Transformer_text")
-  }
-
-  model <- build_transformer_text()
-
-  model %>% compile(
-    optimizer = optimizer_adam(learning_rate = LEARNING_RATE),
-    loss = "sparse_categorical_crossentropy",
-    metrics = c("accuracy")
   )
 
-  summary(model)
+  TransformerText <- nn_module(
+    "TransformerText",
+    initialize = function(vocab_size, d_model, nhead, num_layers,
+                          dim_feedforward, dropout, num_classes, seq_len) {
+      self$embedding <- nn_embedding(vocab_size, d_model, padding_idx = 0)
+      self$scale <- sqrt(d_model)
+      self$pos_enc <- PositionalEncoding(d_model, seq_len)
+      self$dropout <- nn_dropout(dropout)
 
-  callbacks_list <- list(
-    callback_early_stopping(
-      monitor = "val_loss",
-      patience = 15,
-      restore_best_weights = TRUE,
-      verbose = 1
-    ),
-    callback_reduce_lr_on_plateau(
-      monitor = "val_loss",
-      factor = 0.5,
-      patience = 3,
-      verbose = 1
-    ),
-    callback_model_checkpoint(
-      filepath = file.path(output_folder, "best_model.keras"),
-      monitor = "val_accuracy",
-      save_best_only = TRUE,
-      verbose = 1
-    )
+      encoder_layer <- nn_transformer_encoder_layer(
+        d_model = d_model,
+        nhead = nhead,
+        dim_feedforward = dim_feedforward,
+        dropout = dropout,
+        batch_first = TRUE
+      )
+      self$encoder <- nn_transformer_encoder(encoder_layer, num_layers = num_layers)
+      self$fc <- nn_linear(d_model, num_classes)
+    },
+    forward = function(x) {
+      # x: (batch, seq_len) integer token ids
+      pad_mask <- (x == 0)                          # TRUE where padding
+
+      x <- self$embedding(x) * self$scale           # (batch, seq_len, d_model)
+      x <- self$pos_enc(x)
+      x <- self$dropout(x)
+      x <- self$encoder(x, src_key_padding_mask = pad_mask)
+
+      # Mean pool over non-padding positions
+      mask <- (~pad_mask)$unsqueeze(3)$float()      # (batch, seq_len, 1)
+      x <- (x * mask)$sum(2) / mask$sum(2)       # (batch, d_model)
+
+      self$fc(x)                                    # (batch, num_classes)
+    }
   )
+
+  model <- TransformerText %>%
+    setup(
+      loss = nn_cross_entropy_loss(),
+      optimizer = optim_adam,
+      metrics = list(luz_metric_accuracy())
+    ) %>%
+    set_hparams(
+      vocab_size = vocab_size,
+      d_model = D_MODEL,
+      nhead = NHEAD,
+      num_layers = NUM_LAYERS,
+      dim_feedforward = DIM_FEEDFORWARD,
+      dropout = DROPOUT,
+      num_classes = NUM_CLASSES,
+      seq_len = MAX_SEQ_LENGTH
+    ) %>%
+    set_opt_hparams(lr = LEARNING_RATE)
 
   cat(blue("\nTraining started...\n"))
   start_time <- proc.time()["elapsed"]
 
-  history <- model %>% fit(
-    x = X_train_mat,
-    y = y_train,
-    epochs = EPOCHS,
-    batch_size = BATCH_SIZE,
-    validation_data = list(X_val_mat, y_val),
-    callbacks = callbacks_list,
-    verbose = 1
+  fitted_model <- model %>% fit(
+    train_dl,
+    epochs     = EPOCHS,
+    valid_data = val_dl,
+    callbacks  = list(
+      luz_callback_early_stopping(monitor = "valid_loss", patience = 15),
+      luz_callback_lr_scheduler(
+        torch::lr_reduce_on_plateau,
+        monitor  = "valid_loss",
+        factor   = 0.5,
+        patience = 3
+      ),
+      luz_callback_model_checkpoint(
+        path    = file.path(output_folder, "best_model.pt"),
+        monitor = "valid_loss"
+      )
+    ),
+    verbose = TRUE
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
-  train_losses <- history$metrics$loss
-  val_losses <- history$metrics$val_loss
+  train_losses <- fitted_model$records$metrics$train
+  val_losses <- fitted_model$records$metrics$valid
   stop_epoch <- length(train_losses)
 
   write_json(
@@ -424,20 +452,22 @@ if (choice %in% c(1, 2)) {
     pretty = TRUE, auto_unbox = TRUE
   )
 
-  probs_mat <- predict(model, X_test_mat)
+  # Evaluation
+  probs_mat <- predict(fitted_model, X_test_mat)
+  probs_mat <- as.matrix(probs_mat)
   preds <- max.col(probs_mat) - 1L
+
   labels_fct <- factor(unname(class_mapping)[y_test + 1L], levels = unname(class_mapping))
   preds_fct <- factor(unname(class_mapping)[preds  + 1L], levels = unname(class_mapping))
 
   eval_df <- tibble(truth = labels_fct, estimate = preds_fct) %>%
     bind_cols(as_tibble(probs_mat, .name_repair = ~ unname(class_mapping)))
 
-  accuracy <- accuracy(eval_df,  truth, estimate)$.estimate
+  accuracy <- accuracy(eval_df, truth, estimate)$.estimate
   precision <- precision(eval_df, truth, estimate, estimator = "macro")$.estimate
-  recall <- recall(eval_df,    truth, estimate, estimator = "macro")$.estimate
-  f1 <- f_meas(eval_df,    truth, estimate, estimator = "macro")$.estimate
-  roc_auc <- roc_auc(eval_df,   truth, all_of(unname(class_mapping)),
-                        estimator = "macro_weighted")$.estimate
+  recall <- recall(eval_df, truth, estimate, estimator = "macro")$.estimate
+  f1 <- f_meas(eval_df, truth, estimate, estimator = "macro")$.estimate
+  roc_auc <- roc_auc(eval_df, truth, all_of(unname(class_mapping)), estimator = "macro_weighted")$.estimate
 
   report <- lapply(unname(class_mapping), function(cls) {
     tp   <- sum(preds_fct == cls & labels_fct == cls)

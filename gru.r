@@ -21,7 +21,7 @@ cat("Choose a number for a specific task:\n",
   "2. Time series forecasting - Multivariate.\n",
   "3. Text classification\n")
 # choice <- as.integer(readline())
-choice <- 2
+choice <- 3
 train_losses <- c()
 val_losses <- c()
 

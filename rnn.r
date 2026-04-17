@@ -4,7 +4,7 @@ library(data.table)
 library(jsonlite)
 library(crayon)
 library(ggplot2)
-library(timetk)       
+library(timetk)    
 library(keras3)        
 library(text2vec)      
 library(textrecipes)   
@@ -41,6 +41,7 @@ if (choice %in% c(1, 2)) {
   }
   dir.create(output_folder, recursive = TRUE, showWarnings = FALSE)
   
+  # changin date format
   data <- fread(csv_path) %>%
     as_tibble() %>%
     mutate(`Date Time` = as.POSIXct(`Date Time`, format = "%Y-%m-%d %H:%M:%S")) %>%
@@ -49,26 +50,29 @@ if (choice %in% c(1, 2)) {
   TARGET <- "p (mbar)"
   FEATURES <- setdiff(names(data), c("Date Time", TARGET))
 
+  # splitting data
   split_point <- floor(nrow(data) * 0.8)
 
   train_val_df <- data[1:split_point, ]
   test_df <- data[(split_point + 1):nrow(data), ]
 
-  # Inner val split (last 12.5 % of train_val)
   val_n <- floor(nrow(train_val_df) * 0.125)
   train_df <- train_val_df[1:(nrow(train_val_df) - val_n), ]
   val_df <- train_val_df[(nrow(train_val_df) - val_n + 1):nrow(train_val_df), ]
 
-  target_pos <- which(names(train_df) == "p (mbar)")
-  rec <- recipe(train_df) %>%
-    update_role(all_of(names(train_df)[target_pos]), new_role = "outcome") %>%
-    update_role(-all_of(names(train_df)[target_pos]), new_role = "predictor") %>%
-    step_rm(`Date Time`) %>%
-    step_normalize(all_predictors()) %>%
-    prep(training = train_df)
+  # scaling data
+  # target_pos <- which(names(train_df) == "p (mbar)")
+  # rec <- recipe(train_df) %>%
+  #   update_role(all_of(names(train_df)[target_pos]), new_role = "outcome") %>%
+  #   update_role(-all_of(names(train_df)[target_pos]), new_role = "predictor") %>%
+  #   step_rm(`Date Time`) %>%
+  #   step_normalize(all_predictors()) %>%
+  #   prep(training = train_df)
 
-  saveRDS(rec, file = paste0("time_series/results/scaler_", choice, ".rds"))
-  cat(green(sprintf("Scaler saved to time_series/results/scaler_%d.rds\n", choice)))
+  # saveRDS(rec, file = paste0("time_series/results/scaler_", choice, ".rds"))
+  # cat(green(sprintf("Scaler saved to time_series/results/scaler_%d.rds\n", choice)))
+  
+  rec <- readRDS(paste0("time_series/results/scaler_", choice, ".rds"))
 
   X_train <- bake(rec, train_df) %>% select(all_of(FEATURES)) %>% as.matrix()
   X_val <- bake(rec, val_df)   %>% select(all_of(FEATURES)) %>% as.matrix()
@@ -78,13 +82,13 @@ if (choice %in% c(1, 2)) {
   y_test <- test_df[[TARGET]]
 
   create_sequences <- function(X, y, seq_len = 24) {
-    n   <- nrow(X)
-    idx <- seq_len(n - seq_len)
-    Xs  <- array(0, dim = c(length(idx), seq_len, ncol(X)))
-    ys  <- numeric(length(idx))
+    n <- nrow(X)
+    idx <- 1:(n - seq_len)
+    Xs <- array(0, dim = c(length(idx), seq_len, ncol(X)))
+    ys <- numeric(length(idx))
     for (i in idx) {
       Xs[i, , ] <- X[i:(i + seq_len - 1), ]
-      ys[i]     <- y[i + seq_len]
+      ys[i] <- y[i + seq_len]
     }
     list(X = Xs, y = ys)
   }
@@ -92,8 +96,8 @@ if (choice %in% c(1, 2)) {
   SEQ_LENGTH <- 24
 
   tr <- create_sequences(X_train, y_train, SEQ_LENGTH)
-  vl <- create_sequences(X_val,   y_val,   SEQ_LENGTH)
-  te <- create_sequences(X_test,  y_test,  SEQ_LENGTH)
+  vl <- create_sequences(X_val, y_val, SEQ_LENGTH)
+  te <- create_sequences(X_test, y_test, SEQ_LENGTH)
 
   BATCH_SIZE <- 64L
   EPOCHS <- 50L
@@ -185,6 +189,12 @@ if (choice %in% c(1, 2)) {
 
   y_pred <- as.vector(predict(model, te$X))
   y_true <- te$y
+ # changes were made here
+  cat("Correlation:", cor(y_pred, y_true), "\n")
+  cat("Pred range:", range(y_pred), "\n")
+  cat("True range:", range(y_true), "\n")
+  cat("Pred mean:", mean(y_pred), "\n")
+  cat("True mean:", mean(y_true), "\n")
 
   results_df <- tibble(truth = y_true, estimate = y_pred)
   r2 <- rsq(results_df, truth, estimate)$.estimate
@@ -465,20 +475,20 @@ if (choice %in% c(1, 2)) {
   )
 }
 
-p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-  geom_line(linewidth = 0.8) +
-  scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-  facet_wrap(~split, scales = "free_y") +
-  labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss") +
-  theme(
-    legend.position = "none",
-    plot.title = element_text(face = "bold", hjust = 0.5),
-  )
-ggsave(file.path(output_folder, "learning_curve.png"),
-        p_lc, width = 12, height = 5, dpi = 300)
+# p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+#   geom_line(linewidth = 0.8) +
+#   scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+#   facet_wrap(~split, scales = "free_y") +
+#   labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss") +
+#   theme(
+#     legend.position = "none",
+#     plot.title = element_text(face = "bold", hjust = 0.5),
+#   )
+# ggsave(file.path(output_folder, "learning_curve.png"),
+#         p_lc, width = 12, height = 5, dpi = 300)
 
-save_to_file(
-  train_losses, val_losses, execution_time,
-  BATCH_SIZE, hyperparams, stop_epoch, metrics,
-  file_path = file.path(output_folder, "full_results.json")
-)
+# save_to_file(
+#   train_losses, val_losses, execution_time,
+#   BATCH_SIZE, hyperparams, stop_epoch, metrics,
+#   file_path = file.path(output_folder, "full_results.json")
+# )
