@@ -346,56 +346,51 @@ if (choice %in% c(1, 2)) {
   val_dl <- dataloader(val_ds, batch_size = BATCH_SIZE)
   test_dl <- dataloader(test_ds, batch_size = BATCH_SIZE)
 
-  # Positional Encoding
-  make_pe_matrix <- function(seq_len, d_model) {
-    # Returns a plain R matrix (seq_len x d_model)
-    pe       <- matrix(0, nrow = seq_len, ncol = d_model)
-    position <- seq_len(seq_len) - 1L          # 0-based positions
-    div_term <- 10000 ^ (seq(0, d_model - 2, by = 2) / d_model)
-
-    for (i in seq_along(div_term)) {
-      pe[, 2 * i - 1] <- sin(position / div_term[i])   # odd  columns
-      pe[, 2 * i    ] <- cos(position / div_term[i])   # even columns
-    }
-    pe
+  positional_encoding <- function(max_len, embed_dim) {
+    pe  <- matrix(0, nrow = max_len, ncol = embed_dim)
+    pos <- seq_len(max_len) - 1
+    div <- exp(seq(0, embed_dim - 2, by = 2) * (-log(10000) / embed_dim))
+    pe[, seq(1, embed_dim - 1, by = 2)] <- sin(outer(pos, div))
+    pe[, seq(2, embed_dim,     by = 2)] <- cos(outer(pos, div))
+    torch_tensor(pe)$unsqueeze(1)  # (max_len, 1, embed_dim)
   }
+  
+  PE <- positional_encoding(MAX_LEN, EMBED_DIM)
 
   TransformerText <- nn_module(
     "TransformerText",
     initialize = function(vocab_size, d_model, nhead, num_layers,
                           dim_feedforward, dropout, num_classes, seq_len) {
-      self$d_model   <- d_model
-      self$embedding <- nn_embedding(vocab_size, d_model, padding_idx = 1)
-
-      pe_mat <- make_pe_matrix(seq_len, d_model)     
-      pe_tensor <- torch_tensor(pe_mat)$unsqueeze(1)$transpose(1, 2) 
-      self$register_buffer("pe", pe_tensor)
-
-      self$dropout <- nn_dropout(dropout)
-
-      encoder_layer <- nn_transformer_encoder_layer(
-        d_model = d_model,
-        nhead = nhead,
-        dim_feedforward = dim_feedforward,
-        dropout = dropout,
-        batch_first = TRUE
+      self$embedding  <- nn_embedding(vocab_size, embed_dim)
+      self$encoder    <- nn_transformer_encoder(
+        nn_transformer_encoder_layer(
+          d_model   = embed_dim,
+          nhead     = num_heads,
+          dim_feedforward = ff_dim,
+          dropout   = dropout,
+          batch_first = FALSE
+        ),
+        num_layers = 2
       )
-      self$encoder <- nn_transformer_encoder(encoder_layer, num_layers = num_layers)
-      self$fc <- nn_linear(d_model, num_classes)
-
-    }, forward = function(x) {
-      # x: (batch, seq_len) integer token ids
-      pad_mask <- torch_eq(x, 1L)     
-      emb <- self$embedding(x) * sqrt(as.numeric(self$d_model))
-      emb <- emb + self$pe
-      emb <- self$dropout(emb)
-      out <- self$encoder(emb, src_key_padding_mask = pad_mask)
-
-      # Mean-pool over non-padding tokens
-      not_pad  <- torch_logical_not(pad_mask)$unsqueeze(3L)$to(dtype = torch_float())
-      pooled <- (out * not_pad)$sum(2L) / not_pad$sum(2L)$clamp(min = 1)
-
-      self$fc(pooled)   
+      self$dropout    <- nn_dropout(dropout)
+      self$classifier <- nn_linear(embed_dim, num_classes)
+      self$max_len    <- max_len
+  },
+  
+  forward = function(x) {
+      # x: (batch, seq)
+      emb <- self$embedding(x)           # (batch, seq, embed)
+      emb <- emb$permute(c(2, 1, 3))    # (seq, batch, embed)
+  
+      # add positional encoding
+      pe  <- PE$to(device = emb$device)
+      emb <- emb + pe
+  
+      enc <- self$encoder(emb)           # (seq, batch, embed)
+      # mean-pool over sequence
+      pooled <- enc$mean(dim = 1)        # (batch, embed)
+      out    <- self$classifier(self$dropout(pooled))
+      out 
     }
   )
 

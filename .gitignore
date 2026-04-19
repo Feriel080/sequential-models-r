@@ -1,3 +1,4 @@
 /renv
 .Rprofile
-run_all.r
+save_backup.r
+plots.r
