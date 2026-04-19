@@ -20,9 +20,8 @@ fmt_time <- function(secs) format(.POSIXct(secs, tz = "UTC"), "%H:%M:%S")
 cat("Choose a number for a specific task:\n",
     "1. Time series forecasting - Univariate.\n",
     "2. Time series forecasting - Multivariate.\n",
-    "3. Text classification\n")
-# choice <- as.integer(readline())
-choice <- 3
+    "3. Text classification (avoid this it has unsolved bugs)\n")
+choice <- as.integer(readline())
 train_losses <- c()
 val_losses <- c()
 
@@ -346,93 +345,113 @@ if (choice %in% c(1, 2)) {
   val_dl <- dataloader(val_ds, batch_size = BATCH_SIZE)
   test_dl <- dataloader(test_ds, batch_size = BATCH_SIZE)
 
-  positional_encoding <- function(max_len, embed_dim) {
-    pe  <- matrix(0, nrow = max_len, ncol = embed_dim)
-    pos <- seq_len(max_len) - 1
-    div <- exp(seq(0, embed_dim - 2, by = 2) * (-log(10000) / embed_dim))
-    pe[, seq(1, embed_dim - 1, by = 2)] <- sin(outer(pos, div))
-    pe[, seq(2, embed_dim,     by = 2)] <- cos(outer(pos, div))
-    torch_tensor(pe)$unsqueeze(1)  # (max_len, 1, embed_dim)
+  positional_encoding <- function(max_len, d_model) {
+    pe  <- matrix(0, nrow = max_len, ncol = d_model)
+    pos <- matrix(seq_len(max_len) - 1, ncol = 1)           # (L, 1)
+    div <- exp(seq(0, d_model - 1, by = 2) * (-log(10000) / d_model))
+
+    pe[, seq(1, d_model, 2)] <- sin(pos %*% t(div))         # even dims
+    if (d_model %% 2 == 0) {
+      pe[, seq(2, d_model, 2)] <- cos(pos %*% t(div))       # odd dims (full)
+    } else {
+      pe[, seq(2, d_model - 1, 2)] <- cos(pos %*% t(div[seq_len(floor(d_model / 2))]))
+    }
+    torch_tensor(pe)$unsqueeze(1L)                           # (L, 1, d_model)
   }
-  
-  PE <- positional_encoding(MAX_LEN, EMBED_DIM)
 
   TransformerText <- nn_module(
     "TransformerText",
     initialize = function(vocab_size, d_model, nhead, num_layers,
                           dim_feedforward, dropout, num_classes, seq_len) {
-      self$embedding  <- nn_embedding(vocab_size, embed_dim)
-      self$encoder    <- nn_transformer_encoder(
-        nn_transformer_encoder_layer(
-          d_model   = embed_dim,
-          nhead     = num_heads,
-          dim_feedforward = ff_dim,
-          dropout   = dropout,
-          batch_first = FALSE
-        ),
-        num_layers = 2
-      )
-      self$dropout    <- nn_dropout(dropout)
-      self$classifier <- nn_linear(embed_dim, num_classes)
-      self$max_len    <- max_len
+    self$d_model   <- d_model
+    self$embedding <- nn_embedding(vocab_size, d_model, padding_idx = 0)
+    self$dropout   <- nn_dropout(dropout)
+
+    # Register sinusoidal PE as a non-trainable buffer
+    pe <- positional_encoding(seq_len, d_model)
+    self$register_buffer("pe", pe)
+
+    # Stack of Transformer encoder layers
+    encoder_layer <- nn_transformer_encoder_layer(
+      d_model   = d_model,
+      nhead     = nhead,
+      dim_feedforward = dim_feedforward,
+      dropout   = dropout,
+      batch_first = FALSE    # torch default: (L, N, d_model)
+    )
+    self$transformer_encoder <- nn_transformer_encoder(
+      encoder_layer = encoder_layer,
+      num_layers    = num_layers
+    )
+
+    self$classifier <- nn_linear(d_model, num_classes)
   },
-  
   forward = function(x) {
-      # x: (batch, seq)
-      emb <- self$embedding(x)           # (batch, seq, embed)
-      emb <- emb$permute(c(2, 1, 3))    # (seq, batch, embed)
-  
-      # add positional encoding
-      pe  <- PE$to(device = emb$device)
-      emb <- emb + pe
-  
-      enc <- self$encoder(emb)           # (seq, batch, embed)
-      # mean-pool over sequence
-      pooled <- enc$mean(dim = 1)        # (batch, embed)
-      out    <- self$classifier(self$dropout(pooled))
-      out 
+      pad_mask <- (x == 0L) # (batch, seq_len), logical tensor
+      emb <- self$embedding(x) * sqrt(self$d_model)
+      emb <- emb$permute(c(2L, 1L, 3L))        # (L, N, d_model)
+      L <- emb$size(1)
+      emb <- emb + self$pe[seq_len(L), , ]
+      emb <- self$dropout(emb)
+      enc <- self$transformer_encoder(emb, src_key_padding_mask = pad_mask)
+      real_mask <- (~pad_mask)$t()$unsqueeze(3)$float()  # (L, N, 1)
+      pooled <- (enc * real_mask)$sum(dim = 1L) /
+                (real_mask$sum(dim = 1L) + 1e-9)           # (N, d_model)
+      self$classifier(pooled) 
     }
   )
 
   model <- TransformerText %>%
     setup(
-      loss = nn_cross_entropy_loss(),
+      loss      = nn_cross_entropy_loss(),
       optimizer = optim_adam,
-      metrics = list(luz_metric_accuracy())
+      metrics   = list(luz_metric_accuracy())
     ) %>%
     set_hparams(
-      vocab_size = vocab_size,
-      d_model = D_MODEL,
-      nhead = NHEAD,
-      num_layers = NUM_LAYERS,
+      vocab_size  = vocab_size,
+      d_model     = EMBEDDING_DIM,
+      nhead       = NHEAD,
+      num_layers  = NUM_LAYERS,
       dim_feedforward = DIM_FEEDFORWARD,
-      dropout = DROPOUT,
       num_classes = NUM_CLASSES,
-      seq_len = MAX_SEQ_LENGTH
+      seq_len     = MAX_SEQ_LENGTH,
+      dropout     = DROPOUT
     ) %>%
-    set_opt_hparams(lr = LEARNING_RATE)
+  set_opt_hparams(lr = LEARNING_RATE)
+
+  # Early stopping
+  early_stop_cb <- luz_callback_early_stopping(
+    monitor  = "valid_loss",
+    patience = 15,
+    mode     = "min"
+  )
+
+  # Reduce LR on plateau
+  reduce_lr_cb <- luz_callback_lr_scheduler(
+    torch::lr_reduce_on_plateau,
+    monitor  = "valid_loss",
+    factor   = 0.5,
+    patience = 3,
+    verbose  = TRUE
+  )
+
+  checkpoint_cb <- luz_callback_model_checkpoint(
+    path     = file.path(output_folder, "best_model_{epoch}.pt"),
+    monitor  = "valid_acc",
+    mode     = "max",
+    save_best_only = TRUE
+  )
 
   cat(blue("\nTraining started...\n"))
   start_time <- proc.time()["elapsed"]
 
   fitted_model <- luz::fit(
     object = model,
-    data = train_dl,
+    data       = train_dl,
     epochs     = EPOCHS,
     valid_data = val_dl,
-    callbacks  = list(
-      luz_callback_early_stopping(monitor = "valid_loss", patience = 5),
-      luz_callback_lr_scheduler(
-        torch::lr_reduce_on_plateau,
-        factor   = 0.5,
-        patience = 3
-      ),
-      luz_callback_model_checkpoint(
-        path    = file.path(output_folder, "best_model.pt"),
-        monitor = "valid_loss"
-      )
-    ),
-    verbose = TRUE
+    callbacks  = list(early_stop_cb, reduce_lr_cb, checkpoint_cb),
+    verbose    = TRUE
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
@@ -450,7 +469,7 @@ if (choice %in% c(1, 2)) {
   )
 
   # Evaluation
-  probs_mat <- predict(fitted_model, X_test_mat)
+  probs_mat <- predict(fitted_model, test_dl)
   probs_mat <- as.matrix(probs_mat)
   preds <- max.col(probs_mat) - 1L
 
@@ -524,6 +543,7 @@ if (choice %in% c(1, 2)) {
     loss  = c(train_losses, val_losses),
     split = rep(c("Train", "Validation"), each = stop_epoch)
   )
+  
 }
 p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
   geom_line(linewidth = 0.8) +
