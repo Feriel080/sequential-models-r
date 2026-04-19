@@ -1,0 +1,97 @@
+Epoch 1/50
+Train metrics: Loss: 208308.0625 - MAE: 294.2042                              
+Valid metrics: Loss: 15.4641 - MAE: 2.2613
+Epoch 2/50
+Train metrics: Loss: 5.0117 - MAE: 1.3916                                     
+Valid metrics: Loss: 4.5639 - MAE: 1.3844
+Epoch 3/50
+Train metrics: Loss: 2.7463 - MAE: 1.0898                                     
+Valid metrics: Loss: 3.0049 - MAE: 1.1469
+Epoch 4/50
+Train metrics: Loss: 2.2693 - MAE: 0.9957                                     
+Valid metrics: Loss: 2.0661 - MAE: 0.9701
+Epoch 5/50
+Train metrics: Loss: 2.2185 - MAE: 0.9683                                     
+Valid metrics: Loss: 2.0777 - MAE: 1.0236
+Epoch 6/50
+Train metrics: Loss: 1.9015 - MAE: 0.9207                                     
+Valid metrics: Loss: 1.4802 - MAE: 0.6365
+Epoch 7/50
+Train metrics: Loss: 1.8678 - MAE: 0.8875                                     
+Valid metrics: Loss: 1.29 - MAE: 0.5699
+Epoch 8/50
+Train metrics: Loss: 2.2881 - MAE: 0.9215                                     
+Valid metrics: Loss: 1.2863 - MAE: 0.5404
+Epoch 9/50
+Train metrics: Loss: 1.894 - MAE: 0.8683                                      
+Valid metrics: Loss: 1.4192 - MAE: 0.6768
+Epoch 10/50
+Train metrics: Loss: 1.8623 - MAE: 0.8614                                     
+Valid metrics: Loss: 1.4656 - MAE: 0.6956
+Epoch 11/50
+Train metrics: Loss: 1.8674 - MAE: 0.8493                                     
+Valid metrics: Loss: 0.9542 - MAE: 0.526
+Epoch 12/50
+Train metrics: Loss: 1.6754 - MAE: 0.815                                      
+Valid metrics: Loss: 1.4929 - MAE: 0.7785
+Epoch 13/50
+Train metrics: Loss: 1.9045 - MAE: 0.8564                                     
+Valid metrics: Loss: 1.5558 - MAE: 0.7545
+Epoch 14/50
+Train metrics: Loss: 2.415 - MAE: 0.9473                                      
+Valid metrics: Loss: 2.2052 - MAE: 0.901
+Epoch 15/50
+Train metrics: Loss: 1.1664 - MAE: 0.6647                                     
+Valid metrics: Loss: 0.9909 - MAE: 0.698
+Epoch 16/50
+Train metrics: Loss: 0.8727 - MAE: 0.5914                                     
+Valid metrics: Loss: 0.8506 - MAE: 0.6403
+Epoch 17/50
+Train metrics: Loss: 0.7952 - MAE: 0.5725                                     
+Valid metrics: Loss: 0.6551 - MAE: 0.5413
+Epoch 18/50
+Train metrics: Loss: 0.8019 - MAE: 0.5682                                     
+Valid metrics: Loss: 0.608 - MAE: 0.5904
+Epoch 19/50
+Train metrics: Loss: 0.7122 - MAE: 0.5445                                     
+Valid metrics: Loss: 0.3604 - MAE: 0.3417
+Epoch 20/50
+Train metrics: Loss: 0.7365 - MAE: 0.5406                                     
+Valid metrics: Loss: 0.3506 - MAE: 0.3906
+Epoch 21/50
+Train metrics: Loss: 0.4484 - MAE: 0.4387                                     
+Valid metrics: Loss: 0.442 - MAE: 0.5766
+Epoch 22/50
+Train metrics: Loss: 0.4384 - MAE: 0.4285                                     
+Valid metrics: Loss: 0.4233 - MAE: 0.5468
+Epoch 23/50
+Train metrics: Loss: 0.3501 - MAE: 0.3972                                     
+Valid metrics: Loss: 0.318 - MAE: 0.5062
+Epoch 24/50
+Train metrics: Loss: 0.3443 - MAE: 0.392                                      
+Valid metrics: Loss: 0.3592 - MAE: 0.5201
+Epoch 25/50
+Train metrics: Loss: 0.3107 - MAE: 0.3771                                     
+Valid metrics: Loss: 0.2523 - MAE: 0.4379
+Epoch 26/50
+Train metrics: Loss: 0.3579 - MAE: 0.3897                                     
+Valid metrics: Loss: 0.3557 - MAE: 0.5324
+Epoch 27/50
+Train metrics: Loss: 0.2475 - MAE: 0.3286                                     
+Valid metrics: Loss: 0.3507 - MAE: 0.5101
+Epoch 28/50
+Train metrics: Loss: 0.2325 - MAE: 0.3137                                     
+Valid metrics: Loss: 0.391 - MAE: 0.5782
+Epoch 29/50
+Train metrics: Loss: 0.2187 - MAE: 0.3106                                     
+Valid metrics: Loss: 0.5248 - MAE: 0.6729
+Epoch 30/50
+Train metrics: Loss: 0.2192 - MAE: 0.3099                                     
+Valid metrics: Loss: 0.4619 - MAE: 0.6375
+Epoch 31/50
+Train metrics: Loss: 0.2091 - MAE: 0.3028                                     
+Valid metrics: Loss: 0.3536 - MAE: 0.5454
+Epoch 32/50
+Train metrics: Loss: 0.1957 - MAE: 0.2922                                     
+Valid metrics: Loss: 0.4618 - MAE: 0.6318
+Early stopping at epoch 32 of 50

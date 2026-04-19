@@ -1,0 +1,28 @@
+[
+  {
+    "execution_time_seconds": 21404.28,
+    "execution_time_formatted": "05:56:44",
+    "Batch_Size": 64,
+    "model_parameters": {
+      "epochs": 50,
+      "d_model": 64,
+      "nhead": 8,
+      "dim_feedforward": 128,
+      "hidden_size": 64,
+      "num_layers": 2,
+      "dropout": 0.2,
+      "learning_rate": 0.001
+    },
+    "Stopping epoch": 32,
+    "test_metrics": {
+      "R2 score": 0.9989,
+      "MAE": 0.6376,
+      "mse": 0.4816,
+      "rmse": 0.6940
+    },
+    "loss_history": {
+      "train": [],
+      "validation": []
+    }
+  }
+]

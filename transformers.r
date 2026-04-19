@@ -22,7 +22,7 @@ cat("Choose a number for a specific task:\n",
     "2. Time series forecasting - Multivariate.\n",
     "3. Text classification\n")
 # choice <- as.integer(readline())
-choice <- 1
+choice <- 3
 train_losses <- c()
 val_losses <- c()
 
@@ -189,7 +189,6 @@ if (choice %in% c(1, 2)) {
       luz_callback_early_stopping(monitor = "valid_loss", patience = 7),
       luz_callback_lr_scheduler(
         torch::lr_reduce_on_plateau,
-        # monitor = "valid_loss",
         factor = 0.5,
         patience = 5
       ),
@@ -203,8 +202,8 @@ if (choice %in% c(1, 2)) {
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
-  train_losses <- fitted_model$records$metrics$train$loss
-  val_losses <- fitted_model$records$metrics$valid$loss
+  train_losses <- sapply(fitted_model$records$metrics$train, `[[`, "loss")
+  val_losses <- sapply(fitted_model$records$metrics$valid, `[[`, "loss")
   stop_epoch <- length(train_losses)
 
   write_json(
@@ -299,10 +298,10 @@ if (choice %in% c(1, 2)) {
       vocab_term_max = MAX_VOCAB_SIZE - 2L
     )
 
-  vocab_size  <- nrow(vocab) + 2L
+  vocab_size  <- nrow(vocab) + 3L
 
   term_to_idx <- setNames(
-    seq_len(nrow(vocab)) + 1L,
+    seq_len(nrow(vocab)) + 2L,
     vocab$term
   )
 
@@ -311,9 +310,9 @@ if (choice %in% c(1, 2)) {
     t(sapply(tokens, function(toks) {
       toks <- toks[seq_len(min(length(toks), max_len))]
       idx <- term_idx[toks]
-      idx[is.na(idx)] <- 1L
+      idx[is.na(idx)] <- 2L
       length(idx) <- max_len
-      idx[is.na(idx)] <- 0L
+      idx[is.na(idx)] <- 1L
       as.integer(idx)
     }))
   }
@@ -357,10 +356,11 @@ if (choice %in% c(1, 2)) {
       pe[, seq(1, d_model, by = 2)] <- sin(position %*% t(div_term))
       pe[, seq(2, d_model, by = 2)] <- cos(position %*% t(div_term))
 
-      self$register_buffer("pe", torch_tensor(pe)$unsqueeze(1))  # (seq_len, 1, d_model)
+      self$register_buffer("pe", torch_tensor(pe)$unsqueeze(1)$permute(c(2, 1, 3)))  # (seq_len, 1, d_model)
     },
     forward = function(x) {
-      x + self$pe$permute(c(2, 1, 3))  # (1, seq_len, d_model) 
+      seq_len <- x$size(2)
+      x + self$pe[ , 1:seq_len, ] # (1, seq_len, d_model) 
     }
   )
 
@@ -368,7 +368,7 @@ if (choice %in% c(1, 2)) {
     "TransformerText",
     initialize = function(vocab_size, d_model, nhead, num_layers,
                           dim_feedforward, dropout, num_classes, seq_len) {
-      self$embedding <- nn_embedding(vocab_size, d_model, padding_idx = 0)
+      self$embedding <- nn_embedding(vocab_size, d_model, padding_idx = 1)
       self$scale <- sqrt(d_model)
       self$pos_enc <- PositionalEncoding(d_model, seq_len)
       self$dropout <- nn_dropout(dropout)
@@ -385,7 +385,7 @@ if (choice %in% c(1, 2)) {
     },
     forward = function(x) {
       # x: (batch, seq_len) integer token ids
-      pad_mask <- (x == 0)                          # TRUE where padding
+      pad_mask <- (x == 1)                          # TRUE where padding
 
       x <- self$embedding(x) * self$scale           # (batch, seq_len, d_model)
       x <- self$pos_enc(x)
@@ -421,15 +421,15 @@ if (choice %in% c(1, 2)) {
   cat(blue("\nTraining started...\n"))
   start_time <- proc.time()["elapsed"]
 
-  fitted_model <- model %>% fit(
-    train_dl,
+  fitted_model <- luz::fit(
+    object = model,
+    data = train_dl,
     epochs     = EPOCHS,
     valid_data = val_dl,
     callbacks  = list(
-      luz_callback_early_stopping(monitor = "valid_loss", patience = 15),
+      luz_callback_early_stopping(monitor = "valid_loss", patience = 5),
       luz_callback_lr_scheduler(
         torch::lr_reduce_on_plateau,
-        monitor  = "valid_loss",
         factor   = 0.5,
         patience = 3
       ),
@@ -442,8 +442,8 @@ if (choice %in% c(1, 2)) {
   )
 
   execution_time <- proc.time()["elapsed"] - start_time
-  train_losses <- fitted_model$records$metrics$train
-  val_losses <- fitted_model$records$metrics$valid
+  train_losses <- sapply(fitted_model$records$metrics$train, `[[`, "loss")
+  val_losses <- sapply(fitted_model$records$metrics$valid, `[[`, "loss")
   stop_epoch <- length(train_losses)
 
   write_json(
