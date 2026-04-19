@@ -345,22 +345,23 @@ if (choice %in% c(1, 2)) {
   train_dl <- dataloader(train_ds, batch_size = BATCH_SIZE, shuffle = TRUE)
   val_dl <- dataloader(val_ds, batch_size = BATCH_SIZE)
   test_dl <- dataloader(test_ds, batch_size = BATCH_SIZE)
-
+ # was here 
   PositionalEncoding <- nn_module(
     "PositionalEncoding",
     initialize = function(d_model, seq_len) {
-      pe <- matrix(0, nrow = seq_len, ncol = d_model)
+      pe <- array(0, dim = c(1, seq_len, d_model)) 
       position <- matrix(1:seq_len, ncol = 1)
       div_term <- exp(seq(0, d_model - 2, by = 2) * (-log(10000) / d_model))
 
-      pe[, seq(1, d_model, by = 2)] <- sin(position %*% t(div_term))
-      pe[, seq(2, d_model, by = 2)] <- cos(position %*% t(div_term))
+      pe[1, , seq(1, d_model, by = 2)] <- sin(position %*% t(div_term))
+      pe[1, , seq(2, d_model, by = 2)] <- cos(position %*% t(div_term))
 
-      self$register_buffer("pe", torch_tensor(pe)$unsqueeze(1)$permute(c(2, 1, 3)))  # (seq_len, 1, d_model)
+      self$register_buffer("pe", torch_tensor(pe))  # (seq_len, 1, d_model)
     },
     forward = function(x) {
       seq_len <- x$size(2)
-      x + self$pe[ , 1:seq_len, ] # (1, seq_len, d_model) 
+      cat
+      x + self$pe[ , 1:seq_len, ]
     }
   )
 
@@ -393,7 +394,7 @@ if (choice %in% c(1, 2)) {
       x <- self$encoder(x, src_key_padding_mask = pad_mask)
 
       # Mean pool over non-padding positions
-      mask <- (~pad_mask)$unsqueeze(3)$float()      # (batch, seq_len, 1)
+      mask <- torch_logical_not(pad_mask)$unsqueeze(3)$float()      # (batch, seq_len, 1)
       x <- (x * mask)$sum(2) / mask$sum(2)       # (batch, d_model)
 
       self$fc(x)                                    # (batch, num_classes)
