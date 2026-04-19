@@ -386,7 +386,7 @@ if (choice %in% c(1, 2)) {
     }, forward = function(x) {
       # x: (batch, seq_len) integer token ids
       pad_mask <- torch_eq(x, 1L)     
-      emb <- self$embedding(x) * sqrt(self$d_model$item())
+      emb <- self$embedding(x) * sqrt(as.numeric(self$d_model))
       emb <- emb + self$pe
       emb <- self$dropout(emb)
       out <- self$encoder(emb, src_key_padding_mask = pad_mask)

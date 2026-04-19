@@ -21,8 +21,8 @@
       "rmse": 0.6940
     },
     "loss_history": {
-      "train": [],
-      "validation": []
+      "train": [208308.0625, 5.0117],
+      "validation": [15.4641, ]
     }
   }
 ]
