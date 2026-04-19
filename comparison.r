@@ -41,10 +41,11 @@ p_time <- ggplot(df_time, aes(model, secs, fill = model)) +
             vjust = 0, size = 3.5) +
   scale_fill_manual(values = colors) +
   labs(title = "Training time", y = "Time (s)", x = NULL) +
+  theme_minimal() +
   theme(
     legend.position = "none",
-    plot.title = element_text(hjust = 0.5)) +
-  theme_minimal()
+    plot.title = element_text(hjust = 0.5)) 
+  
 
 ggsave(file.path(output, "Training_time.png"), p_time, width = 10, height = 4, dpi = 300)
 
@@ -63,8 +64,8 @@ p_epochs <- ggplot(df_epochs, aes(model, epoch, fill = type)) +
     scale_fill_manual(values = c("best epoch" = "#DC143C", "stop epoch" = "#DA70D6")) +
     labs(title = "Best epoch and stop epoch for each model",
         y = "Epoch", x = NULL, fill = NULL) +
-    theme(plot.title = element_text(hjust = 0.5)) + 
-    theme_minimal()
+    theme_minimal() + 
+    theme(plot.title = element_text(hjust = 0.5)) 
 
 ggsave(file.path(output, "Best_epoch.png"), p_epochs, width = 10, height = 4, dpi = 300)
 
@@ -76,10 +77,11 @@ p_valloss <- ggplot(df_valloss, aes(model, loss, fill = model)) +
     geom_text(aes(y = loss + max(loss) * 0.01, label = sprintf("%.4f", loss)), vjust = 0, size = 3.5) +
     scale_fill_manual(values = colors) +
     labs(title = "Best validation loss for each model", y = "Best val loss", x = NULL) + 
+    theme_minimal() +
     theme(
         plot.title = element_text(hjust = 0.5)
-    ) +
-    theme_minimal()
+    )
+    
 
 ggsave(file.path(output, "Best_val_loss.png"), p_valloss, width = 10, height = 4, dpi = 300)
 
@@ -116,7 +118,9 @@ p_metrics <- ggplot(df_metrics, aes(metric, value, fill = model)) +
   scale_fill_manual(values = colors) +
   scale_y_continuous(limits = c(0, 1.12)) +
   labs(title = "Model performance comparison",
-       y = "Score", x = NULL, fill = NULL)
+       y = "Score", x = NULL, fill = NULL) + 
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=0.5))
 
 ggsave(file.path(output, "metrics_comparison.png"),
        p_metrics, width = 14, height = 5, dpi = 300)
@@ -139,7 +143,9 @@ p_f1 <- ggplot(df_f1, aes(class, f1, fill = model)) +
   scale_fill_manual(values = colors) +
   scale_y_continuous(limits = c(0, 1.12)) +
   labs(title = "F1-score per class comparison",
-       x = "Class", y = "F1-score", fill = NULL)
+       x = "Class", y = "F1-score", fill = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust=0.5))
 
 ggsave(file.path(output, "per_class_f1-score_comparison.png"),
        p_f1, width = 12, height = 6, dpi = 300)
