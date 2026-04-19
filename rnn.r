@@ -473,20 +473,20 @@ if (choice %in% c(1, 2)) {
   )
 }
 
-# p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
-#   geom_line(linewidth = 0.8) +
-#   scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
-#   facet_wrap(~split, scales = "free_y") +
-#   labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss") +
-#   theme(
-#     legend.position = "none",
-#     plot.title = element_text(face = "bold", hjust = 0.5),
-#   )
-# ggsave(file.path(output_folder, "learning_curve.png"),
-#         p_lc, width = 12, height = 5, dpi = 300)
+p_lc <- ggplot(loss_df, aes(epoch, loss, colour = split)) +
+  geom_line(linewidth = 0.8) +
+  scale_colour_manual(values = c(Train = "steelblue", Validation = "darkorange")) +
+  facet_wrap(~split, scales = "free_y") +
+  labs(title = "RNN — Learning curve", x = "Epoch", y = "Loss") +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+  )
+ggsave(file.path(output_folder, "learning_curve.png"),
+        p_lc, width = 12, height = 5, dpi = 300)
 
-# save_to_file(
-#   train_losses, val_losses, execution_time,
-#   BATCH_SIZE, hyperparams, stop_epoch, metrics,
-#   file_path = file.path(output_folder, "full_results.json")
-# )
+save_to_file(
+  train_losses, val_losses, execution_time,
+  BATCH_SIZE, hyperparams, stop_epoch, metrics,
+  file_path = file.path(output_folder, "full_results.json")
+)
